@@ -1,0 +1,2123 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Analisis Peperiksaan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- jsPDF & SheetJS Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .metric-card, .nav-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .metric-card.clickable:hover, .nav-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            cursor: pointer;
+        }
+        #spinner {
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .modal { transition: opacity 0.25s ease; }
+        .modal-active { overflow: hidden; }
+        .modal-content { transition: transform 0.25s ease; }
+        .table-wrapper { overflow-x: auto; }
+        table { white-space: nowrap; }
+        /* Style for drag-and-drop upload area */
+        .dragover {
+            border-color: #3b82f6; /* Tailwind's blue-500 */
+            background-color: #eff6ff; /* Tailwind's blue-50 */
+        }
+        .summary-card-selected {
+            background-color: #dbeafe; /* Tailwind's blue-200 */
+            ring-width: 2px;
+            ring-color: #3b82f6; /* Tailwind's blue-500 */
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #slip-print-area, #slip-print-area * {
+                visibility: visible;
+            }
+            #slip-print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div id="app-container" class="max-w-7xl mx-auto p-4 sm:p-6 md:p-8">
+
+        <!-- Page 1: Upload Page -->
+        <main id="upload-page">
+            <header class="mb-8 text-center">
+                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Dashboard Analisis Peperiksaan</h1>
+                <p id="date-time-display" class="text-sm text-gray-500 mt-2"></p>
+                <p id="upload-subtitle" class="text-md text-gray-600 mt-2">Muat naik fail untuk analisis data.</p>
+            </header>
+
+            <div id="upload-box" class="bg-white p-6 rounded-2xl shadow-md max-w-2xl mx-auto mb-8 border-2 border-dashed border-gray-300 text-center">
+                <label for="csvFile" class="block text-lg font-semibold text-gray-700 mb-2">Muat Naik Fail CSV</label>
+                <p class="text-gray-500 mb-4">Klik untuk memilih fail atau seret dan lepaskan di sini.</p>
+                <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500
+                    file:mx-auto file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100 cursor-pointer"/>
+                <p id="fileNameDisplay" class="text-sm text-gray-600 mt-3"></p>
+                <p id="uploadError" class="text-sm text-red-600 mt-3 font-semibold"></p>
+            </div>
+            
+             <div id="loading" class="text-center my-10 hidden">
+                 <div id="spinner" class="w-12 h-12 rounded-full border-4 border-gray-200 inline-block"></div>
+                 <p class="mt-4 text-lg font-medium text-gray-700">Sedang menganalisis data...</p>
+             </div>
+            <div id="navigation-cards" class="hidden mt-10 max-w-6xl mx-auto">
+                 <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Pilih Jenis Analisis</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                         <div id="nav-keseluruhan" class="nav-card bg-white p-8 rounded-2xl shadow-sm text-center">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                             </svg>
+                            <h3 class="text-xl font-bold mt-4">Analisis Keseluruhan</h3>
+                            <p class="text-gray-600 mt-2">Analisis pencapaian peringkat negeri dan daerah secara keseluruhan.</p>
+                         </div>
+                         <div id="nav-subjek" class="nav-card bg-white p-8 rounded-2xl shadow-sm text-center">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                             </svg>
+                            <h3 class="text-xl font-bold mt-4">Analisis Subjek</h3>
+                            <p class="text-gray-600 mt-2">Analisis terperinci untuk setiap subjek mengikut daerah dan sekolah.</p>
+                         </div>
+                         <div id="nav-sekolah-murid" class="nav-card bg-white p-8 rounded-2xl shadow-sm text-center">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.975 5.975 0 003 15v1h12v-1a5.975 5.975 0 00-3-5.197z" />
+                             </svg>
+                            <h3 class="text-xl font-bold mt-4">Analisis Sekolah & Murid</h3>
+                            <p class="text-gray-600 mt-2">Analisis terperinci untuk sekolah dan prestasi murid individu.</p>
+                         </div>
+                         <div id="nav-stem" class="nav-card bg-white p-8 rounded-2xl shadow-sm text-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                              </svg>
+                            <h3 class="text-xl font-bold mt-4">Analisis STEM</h3>
+                            <p class="text-gray-600 mt-2">Analisis khas untuk pengelasan murid dalam aliran STEM.</p>
+                         </div>
+                 </div>
+            </div>
+        </main>
+
+        <!-- Page 2: Analisis Keseluruhan -->
+        <main id="keseluruhan-page" class="hidden">
+            <div class="flex items-center mb-6">
+                <button class="back-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-transform transform hover:scale-105">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                    Kembali
+                </button>
+            </div>
+            <h1 class="text-3xl font-bold text-center mb-8">Analisis Keseluruhan</h1>
+            <div id="filter-container-keseluruhan" class="max-w-2xl mx-auto mb-8"></div>
+            <div id="results" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></div>
+            <div id="subjectTableContainer" class="mt-12"></div>
+        </main>
+
+        <!-- Page 3: Analisis Subjek -->
+        <main id="subjek-page" class="hidden">
+             <div class="flex items-center mb-6">
+                <button class="back-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-transform transform hover:scale-105">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                    Kembali
+                </button>
+             </div>
+            <h1 class="text-3xl font-bold text-center mb-8">Analisis Terperinci Subjek</h1>
+            <div id="filter-container-subjek" class="bg-white p-6 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div>
+                    <label for="subjekDaerahFilter" class="block text-sm font-medium text-gray-700 mb-1">Daerah</label>
+                    <select id="subjekDaerahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+                </div>
+                 <div>
+                    <label for="subjekSubjekFilter" class="block text-sm font-medium text-gray-700 mb-1">Subjek</label>
+                    <select id="subjekSubjekFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+                </div>
+                 <div>
+                    <label for="subjekSekolahFilter" class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+                    <select id="subjekSekolahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+                </div>
+            </div>
+            <div id="subject-detail-container" class="mt-8"></div>
+        </main>
+
+        <!-- Page 4: Analisis Sekolah & Murid -->
+        <main id="sekolah-murid-page" class="hidden">
+            <div class="flex items-center mb-6">
+               <button class="back-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-transform transform hover:scale-105">
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                   Kembali
+               </button>
+            </div>
+           <h1 class="text-3xl font-bold text-center mb-8">Analisis Sekolah & Murid</h1>
+           <div id="filter-container-sekolah-murid" class="bg-white p-6 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-w-4xl mx-auto">
+               <div>
+                   <label for="sekolahDaerahFilter" class="block text-sm font-medium text-gray-700 mb-1">Pilih Daerah</label>
+                   <select id="sekolahDaerahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+               </div>
+                <div>
+                   <label for="sekolahSekolahFilter" class="block text-sm font-medium text-gray-700 mb-1">Pilih Sekolah</label>
+                   <select id="sekolahSekolahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+               </div>
+           </div>
+           <div id="sekolah-murid-results-container" class="hidden">
+                <div id="sekolah-murid-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></div>
+                <div id="sekolah-murid-subject-table" class="mt-12"></div>
+                <div id="sekolah-murid-student-performance-table" class="mt-12"></div>
+           </div>
+        </main>
+        
+        <!-- Page 5: Analisis STEM -->
+        <main id="stem-page" class="hidden">
+            <div class="flex items-center mb-6">
+               <button class="back-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-transform transform hover:scale-105">
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                   Kembali
+               </button>
+            </div>
+           <h1 class="text-3xl font-bold text-center mb-8">Analisis Pengkhususan STEM</h1>
+            <div id="filter-container-stem" class="bg-white p-6 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 max-w-6xl mx-auto">
+               <div>
+                   <label for="stemDaerahFilter" class="block text-sm font-medium text-gray-700 mb-1">Pilih Daerah</label>
+                   <select id="stemDaerahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+               </div>
+               <div>
+                   <label for="stemSekolahFilter" class="block text-sm font-medium text-gray-700 mb-1">Pilih Sekolah</label>
+                   <select id="stemSekolahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+               </div>
+               <div>
+                   <label for="stemKelasFilter" class="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas STEM</label>
+                   <select id="stemKelasFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="semua">Semua Murid STEM</option>
+                        <option value="A">STEM A (Fizik, Kimia, Biologi & Mat. Tambahan)</option>
+                        <option value="B">STEM B (2 Sains Teras, Mat. Tambahan & 1 Elektif)</option>
+                        <option value="C1">STEM C1 (2 MPEI)</option>
+                        <option value="C2">STEM C2 (MPV)</option>
+                   </select>
+               </div>
+           </div>
+           <div id="stem-results-container">
+                <!-- Results will be injected here -->
+           </div>
+        </main>
+    </div>
+
+    <!-- Modal Senarai Nama (dikongsi antara page) -->
+    <div id="studentListModal" class="modal fixed w-full h-full top-0 left-0 flex items-center justify-center hidden">
+        <div class="modal-overlay absolute w-full h-full bg-gray-900 opacity-50"></div>
+        <div class="modal-content bg-white w-11/12 md:max-w-6xl mx-auto rounded-2xl shadow-lg z-50 transform -translate-y-full">
+            <div class="p-6">
+                <div class="flex justify-between items-center pb-3 border-b">
+                    <p id="modalTitle" class="text-2xl font-bold">Senarai Murid</p>
+                    <button id="closeModalBtn" class="cursor-pointer z-50 p-2 rounded-full hover:bg-gray-200">
+                        <svg class="fill-current text-black" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 18 18"><path d="M14.53 4.53l-1.06-1.06L9 7.94 4.53 3.47 3.47 4.53 7.94 9l-4.47 4.47 1.06 1.06L9 10.06l4.47 4.47 1.06-1.06L10.06 9z"></path></svg>
+                    </button>
+                </div>
+                <div class="my-5 flex flex-wrap gap-4 items-end">
+                    <div class="flex-grow min-w-[250px]">
+                         <label for="studentSearch" class="block text-sm font-medium text-gray-700 mb-1">Cari Nama Murid</label>
+                         <input type="search" id="studentSearch" placeholder="Taip nama untuk menapis..." class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div id="modalSekolahFilterContainer" class="flex-grow min-w-[200px]">
+                        <label for="sekolahFilter" class="block text-sm font-medium text-gray-700 mb-1">Saring Ikut Sekolah</label>
+                        <select id="sekolahFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500"></select>
+                    </div>
+                    <div id="lmsSortContainer" class="flex-grow min-w-[200px] hidden">
+                         <label for="markahSortFilter" class="block text-sm font-medium text-gray-700 mb-1">Susun Ikut Markah</label>
+                         <select id="markahSortFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                              <option value="default">Susunan Asal</option>
+                              <option value="bm_highest">BM Tertinggi</option>
+                              <option value="bm_lowest">BM Terendah</option>
+                              <option value="sej_highest">Sejarah Tertinggi</option>
+                              <option value="sej_lowest">Sejarah Terendah</option>
+                         </select>
+                    </div>
+                    <div id="subjectSortContainer" class="flex-grow min-w-[200px] hidden">
+                        <label for="subjectMarkahSortFilter" class="block text-sm font-medium text-gray-700 mb-1">Susun Ikut Markah</label>
+                        <select id="subjectMarkahSortFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="default">Susunan Asal</option>
+                            <option value="highest">Markah Tertinggi</option>
+                            <option value="lowest">Markah Terendah</option>
+                        </select>
+                    </div>
+                    <div id="gagalSilangFilterContainer" class="flex-grow min-w-[200px] hidden">
+                        <label for="gagalSilangCategoryFilter" class="block text-sm font-medium text-gray-700 mb-1">Saring Ikut Kategori</label>
+                        <select id="gagalSilangCategoryFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="semua">Semua Kategori</option>
+                            <option value="bm_l_sej_g">BM Lulus / SEJ Gagal</option>
+                            <option value="bm_l_sej_th">BM Lulus / SEJ TH</option>
+                            <option value="bm_g_sej_l">BM Gagal / SEJ Lulus</option>
+                            <option value="bm_g_sej_g">BM Gagal / SEJ Gagal</option>
+                            <option value="bm_g_sej_th">BM Gagal / SEJ TH</option>
+                            <option value="bm_th_sej_l">BM TH / SEJ Lulus</option>
+                            <option value="bm_th_sej_g">BM TH / SEJ Gagal</option>
+                            <option value="bm_th_sej_th">BM TH / SEJ TH</option>
+                        </select>
+                    </div>
+                    <div id="gpiSortContainer" class="flex-grow min-w-[200px] hidden">
+                        <label for="gpiSortFilter" class="block text-sm font-medium text-gray-700 mb-1">Susun Ikut GPI</label>
+                        <select id="gpiSortFilter" class="block w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="default">Susunan Asal</option>
+                            <option value="lowest">GPI Terendah (Terbaik)</option>
+                            <option value="highest">GPI Tertinggi (Terakhir)</option>
+                        </select>
+                    </div>
+                </div>
+                 <div class="mt-4 flex justify-end space-x-2">
+                      <button id="generateExcelBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-full text-sm flex items-center space-x-2 transition-all duration-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3 3a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1z" /></svg>
+                          <span>Jana Excel</span>
+                      </button>
+                      <button id="generatePdfBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full text-sm flex items-center space-x-2 transition-all duration-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd" /></svg>
+                          <span>Jana PDF</span>
+                      </button>
+                 </div>
+                <div id="gagalSilangSummaryContainer" class="my-4"></div>
+                <div id="studentListContainer" class="max-h-96 overflow-y-auto mt-4"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Slip Keputusan Murid -->
+    <div id="studentSlipModal" class="modal fixed w-full h-full top-0 left-0 flex items-center justify-center hidden">
+        <div class="modal-overlay absolute w-full h-full bg-gray-900 opacity-50"></div>
+        <div class="modal-content bg-white w-11/12 md:max-w-3xl mx-auto rounded-2xl shadow-lg z-50 transform -translate-y-full">
+            <div class="p-4 sm:p-6">
+                <div class="flex justify-between items-center pb-3 border-b">
+                    <p class="text-xl sm:text-2xl font-bold">Slip Keputusan Murid</p>
+                    <button id="closeSlipModalBtn" class="cursor-pointer z-50 p-2 rounded-full hover:bg-gray-200">
+                        <svg class="fill-current text-black" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 18 18"><path d="M14.53 4.53l-1.06-1.06L9 7.94 4.53 3.47 3.47 4.53 7.94 9l-4.47 4.47 1.06 1.06L9 10.06l4.47 4.47 1.06-1.06L10.06 9z"></path></svg>
+                    </button>
+                </div>
+                <div id="slip-print-area" class="my-5 text-gray-800">
+                    <!-- Slip content will be injected here -->
+                </div>
+                 <div class="mt-6 flex justify-end space-x-2">
+                    <button id="printSlipBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm flex items-center space-x-2 transition-all duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clip-rule="evenodd" /></svg>
+                        <span>Cetak Slip</span>
+                    </button>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Global State ---
+        let fullData = [];
+        let currentAnalysisResults = {};
+        let currentFilteredDataForAnalysis = [];
+        let currentSchoolAnalysisResults = {};
+        let currentSchoolData = [];
+        let currentStudentList = [];
+        let currentModalCategory = '';
+        let currentModalSubject = '';
+        let subjectDetailStudentList = [];
+        let currentSTEMStudents = [];
+        let currentTotalAmbilForSTEM = 0;
+
+        const listModal = document.getElementById('studentListModal');
+        const slipModal = document.getElementById('studentSlipModal');
+        const pages = ['upload-page', 'keseluruhan-page', 'subjek-page', 'sekolah-murid-page', 'stem-page'];
+        const allGrades = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'G', 'TH'];
+
+        // --- STEM Subject Definitions ---
+        const mpeiSubjects = ['SAINS KOMPUTER', 'GRAFIK KOMUNIKASI TEKNIKAL', 'ASAS KELESTARIAN', 'REKA CIPTA', 'PERTANIAN', 'LUKISAN KEJURUTERAAN', 'SAINS RUMAH TANGGA', 'SAINS SUKAN', 'SAINS TAMBAHAN'];
+        const mpvSubjects = ['HIASAN DALAMAN', 'KATERING DAN PENYAJIAN MAKANAN', 'KERJA PAIP DOMESTIK', 'KIMPALAN ARKA DAN GAS', 'PEMBUATAN PERABOT', 'LANDSKAP DAN NURSERI', 'MENSERVIS AUTOMOBIL', 'MENSERVIS MOTORSIKAL', 'MENSERVIS PEALATAN PENYEJUKAN DAN PENYAMANAN UDARA', 'MENSERVIS PERALATAN ELEKTRIK DOMESTIK', 'PEMBINAAN DOMESTIK', 'PEMPROSESAN MAKANAN', 'PRODUKSI MULTIMEDIA', 'PRODUKSI REKA TANDA', 'REKA BENTUK GRAFIK DIGITAL', 'REKAAN DAN JAHITAN PAKAIAN', 'PENDAWAIAN DOMESTIK', 'PENJAGAAN MUKA DAN PENGGAYAAN RAMBUT'];
+        const stemBElectives = [
+            'SAINS TAMBAHAN', 'GRAFIK KOMUNIKASI TEKNIKAL', 'ASAS KELESTARIAN', 'PERTANIAN', 'SAINS RUMAH TANGGA',
+            'REKA CIPTA', 'SAINS KOMPUTER', 'SAINS SUKAN', 'PENGAJIAN KEJURUTERAAN AWAM', 'PENGAJIAN KEJURUTERAAN MEKANIKAL',
+            'PENGAJIAN KEJURUTERAAN ELETRIK DAN ELEKTRONIK', 'LUKISAN KEJURUTERAAN', 'PRINSIP PERAKAUNAN', 'EKONOMI',
+            'PERNIAGAAN', 'PENGAJIAN KEUSAHAWANAN', 'PENDIDIKAN SENI VISUAL', 'PENDIDIKAN MUZIK', 'GEOGRAFI',
+            'KESUSASTERAAAN MELAYU KOMUNIKATIF', 'KESUSASTERAAN INGGERIS', 'KESUSASTERAAN CINA', 'KESUSASTERAAN TAMIL',
+            'PENDIDIKAN AL-QURAN DAN AL-SUNNAH', 'PENDIDIKAN SYARIAH ISLAMIAH', 'TASAWWUR ISLAM', 'USUL AL-DIN',
+            'AL-SYARIAH', 'AL-LUGHAH AL-ARABIAH AL-MU’ASIRAH', 'AL-ADAB WA AL-BALAGHAH', 'AL-MANAHIJ AL-ULUM AL-ISLAMI',
+            'HIFZ AL-QURAN', 'MAHARAT AL-QURAN', 'TURATH DIRASAT AL-ISLAMIAH', 'TURATH BAHASA ARAB', 'TURATH AL-QRAN WA AL-SUNNAH'
+        ].map(s => s.toUpperCase());
+
+        // --- Page Navigation ---
+        function showPage(pageId) {
+            pages.forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById(pageId).classList.remove('hidden');
+            window.scrollTo(0, 0);
+        }
+
+        // --- File Handling and Analysis Flow ---
+        function processFile(file) {
+            const errorDisplay = document.getElementById('uploadError');
+            const uploadSubtitle = document.getElementById('upload-subtitle');
+            errorDisplay.textContent = ''; 
+
+            if (!file || !file.type.match('text/csv')) {
+                 errorDisplay.textContent = 'Ralat: Sila pilih fail format .csv sahaja.';
+                 return;
+            }
+
+            document.getElementById('fileNameDisplay').textContent = `Fail Dipilih: ${file.name}`;
+            uploadSubtitle.textContent = `Menganalisis fail: ${file.name}`;
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('navigation-cards').classList.add('hidden');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                setTimeout(() => { 
+                    try {
+                        fullData = parseCSV(e.target.result);
+                        if(fullData.length === 0) throw new Error("Fail CSV kosong atau tidak sah.");
+                        
+                        setupFiltersAndRunAnalysis();
+                        setupSubjekPageFilters();
+                        setupSekolahMuridPageFilters();
+                        setupSTEMPageFilters(); // New setup function for STEM page
+                        document.getElementById('upload-box').classList.add('hidden');
+                        document.getElementById('navigation-cards').classList.remove('hidden');
+                        uploadSubtitle.textContent = `Fail sedia untuk dianalisis: ${file.name}`;
+                    } catch (error) {
+                        console.error("Error processing file:", error);
+                        errorDisplay.textContent = `Ralat: ${error.message}. Sila pastikan format fail CSV adalah betul.`;
+                        uploadSubtitle.textContent = 'Muat naik fail untuk analisis data.';
+                        document.getElementById('upload-box').classList.remove('hidden');
+                        document.getElementById('navigation-cards').classList.add('hidden');
+                    } finally {
+                        document.getElementById('loading').classList.add('hidden');
+                    }
+                }, 500);
+            };
+            reader.readAsText(file);
+        }
+        
+        // --- Keseluruhan Page ---
+        function setupFiltersAndRunAnalysis() {
+            const daerahList = [...new Set(fullData.map(item => item.PPD))].filter(Boolean).sort();
+            const filterHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-md">
+                    <label for="daerahFilter" class="block text-lg font-semibold text-gray-700 mb-2">Saring Ikut Daerah</label>
+                    <select class="daerahFilter block w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="semua">Semua Daerah</option>
+                        ${daerahList.map(daerah => `<option value="${daerah}">${daerah}</option>`).join('')}
+                    </select>
+                </div>`;
+            document.getElementById('filter-container-keseluruhan').innerHTML = filterHTML;
+            document.querySelector('#filter-container-keseluruhan .daerahFilter').addEventListener('change', runAnalysis);
+            runAnalysis();
+        }
+
+        function runAnalysis() {
+            const selectedDaerah = document.querySelector('#filter-container-keseluruhan .daerahFilter').value;
+            const dataToAnalyze = (selectedDaerah === 'semua') ? fullData : fullData.filter(student => student.PPD === selectedDaerah);
+            currentFilteredDataForAnalysis = dataToAnalyze;
+            currentAnalysisResults = analyzeData(dataToAnalyze);
+            displayKeseluruhanResults(currentAnalysisResults);
+            displaySubjectTable(currentAnalysisResults.subjectStats);
+        }
+        
+        // --- Subjek Page ---
+        function setupSubjekPageFilters() {
+            const daerahFilter = document.getElementById('subjekDaerahFilter');
+            const subjekFilter = document.getElementById('subjekSubjekFilter');
+            const sekolahFilter = document.getElementById('subjekSekolahFilter');
+
+            const daerahList = [...new Set(fullData.map(item => item.PPD))].filter(Boolean).sort();
+            const gradeColumns = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+            const subjekList = gradeColumns.map(s => s.replace('_G', '')).sort();
+
+            daerahFilter.innerHTML = `<option value="semua">Semua Daerah</option>${daerahList.map(d => `<option value="${d}">${d}</option>`).join('')}`;
+            subjekFilter.innerHTML = `<option value="">Pilih Subjek</option>${subjekList.map(s => `<option value="${s}">${s}</option>`).join('')}`;
+            sekolahFilter.innerHTML = `<option value="semua">Semua Sekolah</option>`;
+            sekolahFilter.disabled = true;
+
+            daerahFilter.addEventListener('change', () => {
+                const selectedDaerah = daerahFilter.value;
+                const sekolahList = (selectedDaerah === 'semua')
+                    ? [...new Set(fullData.map(s => s.Sekolah))]
+                    : [...new Set(fullData.filter(s => s.PPD === selectedDaerah).map(s => s.Sekolah))];
+                
+                sekolahFilter.innerHTML = `<option value="semua">Semua Sekolah</option>${sekolahList.filter(Boolean).sort().map(s => `<option value="${s}">${s}</option>`).join('')}`;
+                sekolahFilter.disabled = false;
+                displaySubjectDetail();
+            });
+
+            subjekFilter.addEventListener('change', displaySubjectDetail);
+            sekolahFilter.addEventListener('change', displaySubjectDetail);
+            displaySubjectDetail();
+        }
+
+        function displaySubjectDetail() {
+            const container = document.getElementById('subject-detail-container');
+            const selectedDaerah = document.getElementById('subjekDaerahFilter').value;
+            const selectedSubjek = document.getElementById('subjekSubjekFilter').value;
+            const selectedSekolah = document.getElementById('subjekSekolahFilter').value;
+            
+            if (!selectedSubjek) {
+                container.innerHTML = '<p class="text-center text-gray-500 font-semibold p-8 bg-white rounded-2xl shadow-md">Sila pilih subjek untuk memaparkan analisis.</p>';
+                return;
+            }
+
+            let filteredData = fullData.filter(s => s[`${selectedSubjek}_G`]);
+            if (selectedDaerah !== 'semua') filteredData = filteredData.filter(s => s.PPD === selectedDaerah);
+            if (selectedSekolah !== 'semua') filteredData = filteredData.filter(s => s.Sekolah === selectedSekolah);
+
+            subjectDetailStudentList = filteredData; 
+            
+            const summaryData = calculateOverallSubjectSummary(filteredData, selectedSubjek);
+            const summaryHtml = renderSummaryCards(summaryData);
+            const tableHtml = renderSchoolAnalysisTable(filteredData, selectedSubjek);
+
+            container.innerHTML = summaryHtml + tableHtml;
+
+            container.querySelectorAll('#subject-summary-cards .clickable').forEach(card => {
+                card.addEventListener('click', () => {
+                    openSubjectSummaryModal(card.dataset.category, card.dataset.title);
+                });
+            });
+            document.getElementById('schoolSortFilter')?.addEventListener('change', displaySubjectDetail);
+            container.querySelectorAll('.view-school-student-list-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const schoolName = e.target.dataset.schoolName;
+                    const studentsForSchool = subjectDetailStudentList.filter(s => s.Sekolah === schoolName);
+                    openSubjectStudentListModal(selectedSubjek, studentsForSchool);
+                });
+            });
+        }
+        
+        // --- Sekolah & Murid Page ---
+        function setupSekolahMuridPageFilters() {
+            const daerahFilter = document.getElementById('sekolahDaerahFilter');
+            const sekolahFilter = document.getElementById('sekolahSekolahFilter');
+
+            const daerahList = [...new Set(fullData.map(item => item.PPD))].filter(Boolean).sort();
+            
+            daerahFilter.innerHTML = `<option value="">Pilih Daerah</option>${daerahList.map(d => `<option value="${d}">${d}</option>`).join('')}`;
+            sekolahFilter.innerHTML = `<option value="">Pilih Sekolah</option>`;
+            sekolahFilter.disabled = true;
+
+            daerahFilter.addEventListener('change', () => {
+                const selectedDaerah = daerahFilter.value;
+                document.getElementById('sekolah-murid-results-container').classList.add('hidden');
+                if (!selectedDaerah) {
+                    sekolahFilter.innerHTML = `<option value="">Pilih Sekolah</option>`;
+                    sekolahFilter.disabled = true;
+                    return;
+                }
+
+                const sekolahList = [...new Set(fullData.filter(s => s.PPD === selectedDaerah).map(s => s.Sekolah))];
+                sekolahFilter.innerHTML = `<option value="">Pilih Sekolah</option>${sekolahList.filter(Boolean).sort().map(s => `<option value="${s}">${s}</option>`).join('')}`;
+                sekolahFilter.disabled = false;
+            });
+
+            sekolahFilter.addEventListener('change', runSekolahMuridAnalysis);
+        }
+
+        function runSekolahMuridAnalysis() {
+            const selectedSekolah = document.getElementById('sekolahSekolahFilter').value;
+            const resultsContainer = document.getElementById('sekolah-murid-results-container');
+            
+            if (!selectedSekolah) {
+                resultsContainer.classList.add('hidden');
+                return;
+            }
+
+            currentSchoolData = fullData.filter(student => student.Sekolah === selectedSekolah);
+            currentSchoolAnalysisResults = analyzeData(currentSchoolData);
+            
+            displaySekolahMuridSummaryCards(currentSchoolAnalysisResults);
+            displaySekolahMuridSubjectTable(currentSchoolAnalysisResults.subjectStats);
+            displaySekolahMuridStudentPerformanceTable(currentSchoolData);
+            
+            resultsContainer.classList.remove('hidden');
+        }
+
+        // --- STEM Page ---
+        function setupSTEMPageFilters() {
+            const daerahFilter = document.getElementById('stemDaerahFilter');
+            const sekolahFilter = document.getElementById('stemSekolahFilter');
+            const kelasFilter = document.getElementById('stemKelasFilter');
+
+            const daerahList = [...new Set(fullData.map(item => item.PPD))].filter(Boolean).sort();
+            
+            daerahFilter.innerHTML = `<option value="semua">Semua Daerah</option>${daerahList.map(d => `<option value="${d}">${d}</option>`).join('')}`;
+            sekolahFilter.innerHTML = `<option value="semua">Semua Sekolah</option>`;
+            sekolahFilter.disabled = true;
+
+            daerahFilter.addEventListener('change', () => {
+                const selectedDaerah = daerahFilter.value;
+                 const sekolahList = (selectedDaerah === 'semua')
+                    ? [...new Set(fullData.map(s => s.Sekolah))]
+                    : [...new Set(fullData.filter(s => s.PPD === selectedDaerah).map(s => s.Sekolah))];
+                
+                sekolahFilter.innerHTML = `<option value="semua">Semua Sekolah</option>${sekolahList.filter(Boolean).sort().map(s => `<option value="${s}">${s}</option>`).join('')}`;
+                sekolahFilter.disabled = selectedDaerah === 'semua';
+                runSTEMAnalysis();
+            });
+
+            sekolahFilter.addEventListener('change', runSTEMAnalysis);
+            kelasFilter.addEventListener('change', runSTEMAnalysis);
+            runSTEMAnalysis(); // Initial run
+        }
+
+        function classifyStudentSTEM(student) {
+            const studentSubjects = Object.keys(student)
+                .filter(key => (key.endsWith('_G') || key.endsWith('_M')) && student[key] && student[key].trim() !== '')
+                .map(key => key.replace(/_G|_M$/, '').trim().toUpperCase());
+            
+            const uniqueSubjects = [...new Set(studentSubjects)];
+            const has = (subject) => uniqueSubjects.includes(subject.toUpperCase());
+            
+            // STEM A check: Fizik, Kimia, Biologi, AND Matematik Tambahan
+            if (has('FIZIK') && has('KIMIA') && has('BIOLOGI') && has('MATEMATIK TAMBAHAN')) {
+                return 'A';
+            }
+
+            // STEM B check:
+            // 1. Any two of (Fizik, Kimia, Biologi)
+            const coreScienceSubjectsCount = ['FIZIK', 'KIMIA', 'BIOLOGI'].filter(sub => has(sub)).length;
+            // 2. Must take Matematik Tambahan
+            const hasMathsTambahan = has('MATEMATIK TAMBAHAN');
+            // 3. Must take at least one elective from the new list
+            const hasStemBElective = stemBElectives.some(sub => has(sub));
+
+            if (coreScienceSubjectsCount === 2 && hasMathsTambahan && hasStemBElective) {
+                return 'B';
+            }
+
+            // STEM C1/C2 checks remain the same.
+            const mpeiTakenCount = mpeiSubjects.filter(sub => has(sub)).length;
+            if (mpeiTakenCount >= 2) return 'C1';
+            
+            const mpvTakenCount = mpvSubjects.filter(sub => has(sub)).length;
+            if (mpvTakenCount > 0) return 'C2';
+
+            return 'None';
+        }
+
+        function runSTEMAnalysis() {
+            const selectedDaerah = document.getElementById('stemDaerahFilter').value;
+            const selectedSekolah = document.getElementById('stemSekolahFilter').value;
+            const selectedKelas = document.getElementById('stemKelasFilter').value;
+
+            let filteredData = fullData;
+            if (selectedDaerah !== 'semua') filteredData = filteredData.filter(s => s.PPD === selectedDaerah);
+            if (selectedSekolah !== 'semua') filteredData = filteredData.filter(s => s.Sekolah === selectedSekolah);
+
+            const totalAmbil = analyzeData(filteredData).jumlahAmbil;
+            currentTotalAmbilForSTEM = totalAmbil; // Store globally
+
+            const classifiedStudents = filteredData.map(student => ({...student, stemCategory: classifyStudentSTEM(student) }));
+            
+            let stemStudents;
+            if (selectedKelas === 'semua') {
+                stemStudents = classifiedStudents.filter(s => s.stemCategory !== 'None');
+            } else {
+                stemStudents = classifiedStudents.filter(s => s.stemCategory === selectedKelas);
+            }
+
+            currentSTEMStudents = stemStudents; // Store globally
+
+            displaySTEMResults(stemStudents, totalAmbil);
+        }
+
+        function displaySTEMResults(students, totalAmbil) {
+            const container = document.getElementById('stem-results-container');
+            if (!students || students.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 font-semibold p-8 bg-white rounded-2xl shadow-md mt-8">Tiada murid yang sepadan dengan kriteria penapisan.</p>';
+                return;
+            }
+
+            const analysis = analyzeData(students);
+            const peratusSTEM = totalAmbil > 0 ? ((analysis.jumlahAmbil / totalAmbil) * 100).toFixed(2) : '0.00';
+
+            const summaryHTML = `
+                 <div id="stem-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8">
+                     <div class="metric-card bg-white p-6 rounded-2xl shadow-sm">
+                         <p class="text-sm font-medium text-gray-500">Jumlah Murid STEM</p>
+                         <p class="text-4xl font-bold text-gray-900 mt-1">${analysis.jumlahAmbil.toLocaleString()}</p>
+                     </div>
+                     <div class="metric-card bg-white p-6 rounded-2xl shadow-sm">
+                         <p class="text-sm font-medium text-gray-500">Peratus Murid STEM</p>
+                         <p class="text-4xl font-bold text-gray-900 mt-1">${peratusSTEM}%</p>
+                     </div>
+                      <div class="metric-card bg-white p-6 rounded-2xl shadow-sm">
+                         <p class="text-sm font-medium text-gray-500">GPS</p>
+                         <p class="text-4xl font-bold text-gray-900 mt-1">${analysis.gpn}</p>
+                     </div>
+                      <div class="metric-card bg-white p-6 rounded-2xl shadow-sm">
+                         <p class="text-sm font-medium text-gray-500">Layak Sijil (LMS)</p>
+                         <p class="text-4xl font-bold text-gray-900 mt-1">${analysis.layakMendapatSijil.toLocaleString()} <span class="text-xl font-medium text-gray-500">(${analysis.peratusLMS}%)</span></p>
+                     </div>
+                 </div>
+            `;
+            
+            const gradeColumns = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+            const gradeValues = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+            
+            const sortOrder = document.getElementById('stemGpiSortFilter')?.value || 'asal';
+
+            let sortedStudents = students.map(s => ({
+                ...s,
+                gpi: calculateGPI(s, gradeColumns, gradeValues)
+            }));
+            
+            if (sortOrder === 'tertinggi') { // GPI Tertinggi -> Highest value, worst performance
+                sortedStudents.sort((a, b) => b.gpi - a.gpi);
+            } else if (sortOrder === 'terendah') { // GPI Terendah -> Lowest value, best performance
+                sortedStudents.sort((a, b) => a.gpi - b.gpi);
+            }
+
+            const studentListTableHTML = `
+                 <div class="bg-white p-6 rounded-2xl shadow-md mt-12">
+                      <div class="flex justify-between items-center mb-4 flex-wrap gap-4">
+                        <h3 class="text-2xl font-bold text-gray-900">Senarai Murid</h3>
+                        <div>
+                            <label for="stemGpiSortFilter" class="text-sm font-medium text-gray-700 mr-2">Susun Ikut GPI:</label>
+                            <select id="stemGpiSortFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="asal" ${sortOrder === 'asal' ? 'selected' : ''}>Susunan Asal</option>
+                                <option value="terendah" ${sortOrder === 'terendah' ? 'selected' : ''}>GPI Terendah (Terbaik)</option>
+                                <option value="tertinggi" ${sortOrder === 'tertinggi' ? 'selected' : ''}>GPI Tertinggi (Terakhir)</option>
+                            </select>
+                        </div>
+                      </div>
+                      <div class="table-wrapper">
+                          <table class="w-full text-sm text-left text-gray-600">
+                               <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                   <tr>
+                                       <th scope="col" class="px-4 py-3">Bil</th>
+                                       <th scope="col" class="px-4 py-3">Nama Murid</th>
+                                       <th scope="col" class="px-4 py-3">Sekolah</th>
+                                       <th scope="col" class="px-4 py-3 text-center">Kelas STEM</th>
+                                       <th scope="col" class="px-4 py-3 text-center">GPI</th>
+                                       <th scope="col" class="px-4 py-3">Pencapaian</th>
+                                       <th scope="col" class="px-4 py-3 text-center">Tindakan</th>
+                                   </tr>
+                               </thead>
+                               <tbody>
+                                   ${sortedStudents.map((student, index) => `
+                                       <tr class="border-b hover:bg-gray-50">
+                                           <td class="px-4 py-2">${index + 1}</td>
+                                           <td class="px-4 py-2 font-medium text-gray-900">${student.Nama || 'N/A'}</td>
+                                           <td class="px-4 py-2">${student.Sekolah || 'N/A'}</td>
+                                           <td class="px-4 py-2 text-center font-semibold">${student.stemCategory}</td>
+                                           <td class="px-4 py-2 text-center font-bold">${student.gpi.toFixed(2)}</td>
+                                           <td class="px-4 py-2">${getGradeSummary(student, gradeColumns)}</td>
+                                           <td class="px-4 py-2 text-center">
+                                               <button data-student-index="${index}" class="view-slip-btn-stem bg-purple-500 text-white px-3 py-1 rounded-md hover:bg-purple-600 text-xs">Papar Slip</button>
+                                           </td>
+                                       </tr>
+                                   `).join('')}
+                               </tbody>
+                          </table>
+                      </div>
+                 </div>
+            `;
+            
+            const stemSubjectTableHTML = renderSTEMSubjectTable(analysis.subjectStats);
+
+            container.innerHTML = summaryHTML + stemSubjectTableHTML + studentListTableHTML;
+
+            container.querySelectorAll('.view-slip-btn-stem').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const studentIndex = parseInt(e.target.dataset.studentIndex, 10);
+                    const student = sortedStudents[studentIndex];
+                    if (student) {
+                        openSlipModal(student);
+                    }
+                });
+            });
+
+            const stemSubjectFilter = document.getElementById('stemSubjectFilter');
+            if (stemSubjectFilter) {
+                stemSubjectFilter.addEventListener('change', () => {
+                    displaySTEMResults(currentSTEMStudents, currentTotalAmbilForSTEM);
+                });
+            }
+
+            const stemGpiSortFilter = document.getElementById('stemGpiSortFilter');
+            if(stemGpiSortFilter) {
+                stemGpiSortFilter.addEventListener('change', () => {
+                    displaySTEMResults(currentSTEMStudents, currentTotalAmbilForSTEM);
+                });
+            }
+        }
+
+        function renderSTEMSubjectTable(subjectStats) {
+            if (!subjectStats || Object.keys(subjectStats).length === 0) {
+                return ''; // Return empty if no subject data
+            }
+
+            const allSubjectsList = Object.keys(subjectStats).sort();
+            const selectedSubject = document.getElementById('stemSubjectFilter')?.value || 'semua';
+
+            let subjectsToDisplay;
+            if (selectedSubject === 'semua') {
+                subjectsToDisplay = Object.values(subjectStats).sort((a, b) => b.jumlahAmbil - a.jumlahAmbil);
+            } else {
+                subjectsToDisplay = subjectStats[selectedSubject] ? [subjectStats[selectedSubject]] : [];
+            }
+
+            const dropdownHTML = `
+                <div class="flex justify-end mb-4">
+                     <div>
+                        <label for="stemSubjectFilter" class="text-sm font-medium text-gray-700 mr-2">Saring Ikut Subjek:</label>
+                        <select id="stemSubjectFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="semua">Semua Subjek</option>
+                            ${allSubjectsList.map(s => `<option value="${s}" ${selectedSubject === s ? 'selected' : ''}>${s}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+            `;
+
+            const tableHeader = `
+                <div class="bg-white p-6 rounded-2xl shadow-md mt-12">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Analisis Subjek STEM</h3>
+                    ${dropdownHTML}
+                    <div class="table-wrapper">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3">Subjek</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Jumlah Ambil</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Lulus (Bil/%)</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Gagal (Bil/%)</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Cemerlang (Bil/%)</th>
+                                    <th scope="col" class="px-4 py-3 text-center border-r-2 border-black">GPMP</th>
+                                    ${allGrades.map(g => `<th scope="col" class="px-2 py-3 text-center">${g}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            const tableBody = subjectsToDisplay.map(s => {
+                const peratusLulus = s.jumlahAmbil > 0 ? (s.bilLulus / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const peratusGagal = s.jumlahAmbil > 0 ? (s.bilGagal / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const peratusCemerlang = s.jumlahAmbil > 0 ? (s.bilCemerlang / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const gpmpColorClass = getGpmpColorClass(s.gpmp);
+
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <th scope="row" class="px-4 py-2 font-medium text-gray-900 whitespace-normal">${s.nama}</th>
+                        <td class="px-4 py-2 text-center">${s.jumlahAmbil.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-center">${s.bilLulus.toLocaleString()} (${peratusLulus}%)</td>
+                        <td class="px-4 py-2 text-center">${s.bilGagal.toLocaleString()} (${peratusGagal}%)</td>
+                        <td class="px-4 py-2 text-center">${s.bilCemerlang.toLocaleString()} (${peratusCemerlang}%)</td>
+                        <td class="px-4 py-2 text-center font-bold ${gpmpColorClass} border-r-2 border-black">${s.gpmp.toFixed(2)}</td>
+                        ${allGrades.map(g => `<td class="px-2 py-2 text-center">${(s.gradeCounts[g] || 0).toLocaleString()}</td>`).join('')}
+                    </tr>
+                `;
+            }).join('');
+
+            const tableFooter = `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            return tableHeader + tableBody + tableFooter;
+        }
+
+
+        // --- Data Parsing & Analysis Logic ---
+        function parseCSV(text) {
+            const lines = text.trim().split(/\r\n|\n/).filter(line => line.trim() !== '');
+            if (lines.length < 2) return [];
+            const header = lines[0].split(',').map(h => h.trim());
+            const expectedColumnCount = header.length;
+
+            return lines.slice(1).map(line => {
+                const values = line.split(',');
+                if (values.length !== expectedColumnCount || values.every(v => v.trim() === '')) {
+                     console.warn('Skipping malformed or empty row:', line);
+                     return null;
+                }
+                const obj = {};
+                header.forEach((key, index) => {
+                    obj[key] = values[index] ? values[index].trim() : '';
+                });
+                return obj;
+            }).filter(Boolean);
+        }
+
+        function analyzeData(data) {
+            if (data.length === 0) return { lists: {}, subjectStats: {} };
+            const header = Object.keys(data[0] || {});
+            const gradeColumns = header.filter(h => h.endsWith('_G'));
+            let results = {
+                jumlahCalon: data.length, jumlahAmbil: 0, jumlahTidakHadirSemua: 0, jumlahCemerlang: 0,
+                jumlahSipiCemerlang: 0,
+                gagalSilang: 0, layakMendapatSijil: 0, totalGradePoints: 0, totalSubjectsCount: 0,
+                lists: { cemerlang: [], gagalSilang: [], tidakHadir: [], lms: [], sipiCemerlang: [] },
+                subjectStats: {}
+            };
+            const gradeValues = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+            const cemerlangGrades = ['A+', 'A', 'A-'];
+            
+            data.forEach(student => {
+                const studentGrades = gradeColumns.map(col => student[col]).filter(Boolean);
+                if (studentGrades.length === 0) return;
+                const validGrades = studentGrades.filter(g => g.toUpperCase() !== 'TH');
+                const bmGrade = student['BAHASA MELAYU_G'], sejGrade = student['SEJARAH_G']; 
+                const bmUpper = bmGrade ? bmGrade.toUpperCase() : '', sejUpper = sejGrade ? sejGrade.toUpperCase() : '';
+
+                if (validGrades.length > 0) results.jumlahAmbil++;
+                else {
+                    results.jumlahTidakHadirSemua++;
+                    results.lists.tidakHadir.push(student);
+                }
+                if ((bmUpper === 'G' || bmUpper === 'TH') || (sejUpper === 'G' || sejUpper === 'TH')) {
+                    results.gagalSilang++;
+                    results.lists.gagalSilang.push(student);
+                }
+                if (bmGrade && bmUpper !== 'G' && bmUpper !== 'TH' && sejGrade && sejUpper !== 'G' && sejUpper !== 'TH') {
+                    results.layakMendapatSijil++;
+                    results.lists.lms.push(student);
+                }
+                
+                let isCemerlang = false;
+                if (validGrades.length >= 6 && validGrades.every(g => cemerlangGrades.includes(g.toUpperCase()))) {
+                    results.jumlahCemerlang++;
+                    results.lists.cemerlang.push(student);
+                    isCemerlang = true;
+                }
+
+                // Sipi Cemerlang check: only if not already categorized as cemerlang
+                if (!isCemerlang && validGrades.length > 0) {
+                    const cemerlangCountForSipi = validGrades.filter(g => cemerlangGrades.includes(g.toUpperCase())).length;
+                    if ((cemerlangCountForSipi / validGrades.length) >= 0.75) {
+                        results.jumlahSipiCemerlang++;
+                        results.lists.sipiCemerlang.push(student);
+                    }
+                }
+
+                gradeColumns.forEach(col => {
+                    const grade = student[col];
+                    if (grade) {
+                        const subjectName = col.replace('_G', '');
+                        if (!results.subjectStats[subjectName]) {
+                            results.subjectStats[subjectName] = {
+                                nama: subjectName, jumlahAmbil: 0, bilLulus: 0, bilGagal: 0, bilCemerlang: 0,
+                                totalGradePoints: 0, gradeCounts: Object.fromEntries(allGrades.map(g => [g, 0]))
+                            };
+                        }
+                        const stats = results.subjectStats[subjectName];
+                        stats.gradeCounts[grade.toUpperCase()]++;
+
+                        if (grade.toUpperCase() !== 'TH') {
+                            stats.jumlahAmbil++;
+                            if (grade.toUpperCase() !== 'G') {
+                                stats.bilLulus++;
+                            } else {
+                                stats.bilGagal++;
+                            }
+                            if (cemerlangGrades.includes(grade.toUpperCase())) stats.bilCemerlang++;
+                            if (grade.toUpperCase() in gradeValues) {
+                                stats.totalGradePoints += gradeValues[grade.toUpperCase()];
+                                results.totalGradePoints += gradeValues[grade.toUpperCase()];
+                                results.totalSubjectsCount++;
+                            }
+                        }
+                    }
+                });
+            });
+            Object.values(results.subjectStats).forEach(stats => stats.gpmp = stats.jumlahAmbil > 0 ? (stats.totalGradePoints / stats.jumlahAmbil) : 0);
+            results.jumlahSubjek = Object.keys(results.subjectStats).length;
+            results.gpn = (results.totalSubjectsCount > 0 ? (results.totalGradePoints / results.totalSubjectsCount) : 0).toFixed(2);
+            results.peratusLMS = (results.jumlahAmbil > 0 ? (results.layakMendapatSijil / results.jumlahAmbil) * 100 : 0).toFixed(2);
+            return results;
+        }
+
+        function analyzeSchoolsBySubject(studentData, subjectName) {
+            if (!studentData || studentData.length === 0) return [];
+            const schools = {};
+            studentData.forEach(student => {
+                const schoolName = student.Sekolah;
+                if (!schoolName) return;
+                if (!schools[schoolName]) {
+                    schools[schoolName] = [];
+                }
+                schools[schoolName].push(student);
+            });
+
+            const schoolStats = Object.keys(schools).map(schoolName => {
+                const schoolStudents = schools[schoolName];
+                const stats = {
+                    namaSekolah: schoolName, jumlahAmbil: 0, bilLulus: 0, bilGagal: 0, bilCemerlang: 0, 
+                    totalGradePoints: 0, gradeCounts: Object.fromEntries(allGrades.map(g => [g, 0]))
+                };
+                
+                const cemerlangGrades = ['A+', 'A', 'A-'];
+                const gradeValues = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+
+                schoolStudents.forEach(student => {
+                    const grade = student[`${subjectName}_G`];
+                    if (grade) {
+                        const gradeUpper = grade.toUpperCase();
+                        stats.gradeCounts[gradeUpper]++;
+                        if (gradeUpper !== 'TH') {
+                            stats.jumlahAmbil++;
+                            if (gradeUpper !== 'G') stats.bilLulus++;
+                            if (gradeUpper === 'G') stats.bilGagal++;
+                            if (cemerlangGrades.includes(gradeUpper)) stats.bilCemerlang++;
+                            if (gradeUpper in gradeValues) {
+                                stats.totalGradePoints += gradeValues[gradeUpper];
+                            }
+                        }
+                    }
+                });
+
+                stats.gpmp = stats.jumlahAmbil > 0 ? (stats.totalGradePoints / stats.jumlahAmbil) : 0;
+                return stats;
+            });
+            return schoolStats;
+        }
+
+        function calculateOverallSubjectSummary(studentData, subjectName) {
+            const summary = { bilMuridAmbil: 0, gpmp: 0, bilLulus: 0, bilGagal: 0, bilCemerlang: 0, bilTH: 0, bilSekolahAmbil: 0, totalGradePoints: 0 };
+            if (!studentData || studentData.length === 0) return summary;
+
+            const cemerlangGrades = ['A+', 'A', 'A-'];
+            const gradeValues = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+            
+            studentData.forEach(student => {
+                const grade = student[`${subjectName}_G`];
+                if (grade) {
+                    const gradeUpper = grade.toUpperCase();
+                    if (gradeUpper === 'TH') {
+                        summary.bilTH++;
+                    } else {
+                        summary.bilMuridAmbil++;
+                        if (gradeUpper === 'G') summary.bilGagal++;
+                        else summary.bilLulus++;
+
+                        if (cemerlangGrades.includes(gradeUpper)) summary.bilCemerlang++;
+                        if (gradeUpper in gradeValues) {
+                            summary.totalGradePoints += gradeValues[gradeUpper];
+                        }
+                    }
+                }
+            });
+
+            summary.bilSekolahAmbil = [...new Set(studentData.map(s => s.Sekolah).filter(Boolean))].length;
+            summary.gpmp = summary.bilMuridAmbil > 0 ? (summary.totalGradePoints / summary.bilMuridAmbil).toFixed(2) : '0.00';
+            summary.peratusLulus = summary.bilMuridAmbil > 0 ? ((summary.bilLulus / summary.bilMuridAmbil) * 100).toFixed(2) : '0.00';
+            summary.peratusGagal = summary.bilMuridAmbil > 0 ? ((summary.bilGagal / summary.bilMuridAmbil) * 100).toFixed(2) : '0.00';
+            summary.peratusCemerlang = summary.bilMuridAmbil > 0 ? ((summary.bilCemerlang / summary.bilMuridAmbil) * 100).toFixed(2) : '0.00';
+
+            return summary;
+        }
+
+        function calculateGPI(student, gradeColumns, gradeValues) {
+            let totalPoints = 0;
+            let subjectsTaken = 0;
+            gradeColumns.forEach(col => {
+                const grade = student[col]?.toUpperCase();
+                if (grade && grade !== 'TH' && grade in gradeValues) {
+                    totalPoints += gradeValues[grade];
+                    subjectsTaken++;
+                }
+            });
+            return subjectsTaken > 0 ? (totalPoints / subjectsTaken) : 0;
+        }
+
+        function getGradeSummary(student, gradeColumns) {
+            const gradeCounts = {};
+            gradeColumns.forEach(col => {
+                const grade = student[col]?.toUpperCase();
+                if (grade) {
+                    gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
+                }
+            });
+            const sortedGrades = Object.keys(gradeCounts).sort((a, b) => {
+                const order = allGrades;
+                return order.indexOf(a) - order.indexOf(b);
+            });
+            return sortedGrades.map(g => `${gradeCounts[g]}${g}`).join(' ');
+        }
+        
+        function getGradeCounts(student, gradeColumns) {
+            const counts = {};
+            gradeColumns.forEach(col => {
+                const grade = student[col]?.toUpperCase();
+                if (grade) {
+                    counts[grade] = (counts[grade] || 0) + 1;
+                }
+            });
+            return counts;
+        }
+
+
+        // --- Display Functions ---
+        function displayKeseluruhanResults(results) {
+            const resultsDiv = document.getElementById('results');
+            if (!results || !results.jumlahCalon) {
+                resultsDiv.innerHTML = `<p class="text-center col-span-full text-red-500 font-semibold">Tiada data untuk dipaparkan.</p>`;
+                return;
+            }
+            const peratusCemerlang = (results.jumlahAmbil > 0 ? (results.jumlahCemerlang / results.jumlahAmbil) * 100 : 0).toFixed(2);
+            const peratusSipiCemerlang = (results.jumlahAmbil > 0 ? (results.jumlahSipiCemerlang / results.jumlahAmbil) * 100 : 0).toFixed(2);
+            const peratusGagalSilang = (results.jumlahAmbil > 0 ? (results.gagalSilang / results.jumlahAmbil) * 100 : 0).toFixed(2);
+            
+            const metrics = [
+                { title: 'Jumlah Calon', value: results.jumlahCalon.toLocaleString(), icon: '👥' },
+                { title: 'Jumlah Ambil', value: results.jumlahAmbil.toLocaleString(), icon: '🙋' },
+                { title: 'Tidak Hadir Semua Subjek', value: results.jumlahTidakHadirSemua.toLocaleString(), icon: '✖️', category: 'tidakHadir' },
+                { title: 'Jumlah Subjek', value: results.jumlahSubjek.toLocaleString(), icon: '📚' },
+                { title: 'Gred Purata (GP)', value: results.gpn, icon: '📊' },
+                { title: 'Peratus LMS (%)', value: results.peratusLMS, icon: '📈' },
+                { title: 'Layak Mendapat Sijil (LMS)', value: `${results.layakMendapatSijil.toLocaleString()} <span class="text-lg font-medium text-gray-500">/ ${results.jumlahAmbil.toLocaleString()}</span>`, icon: '📜', category: 'lms' },
+                { title: 'Jumlah Cemerlang', value: `${results.jumlahCemerlang.toLocaleString()} (${peratusCemerlang}%)`, icon: '🌟', category: 'cemerlang' },
+                { title: 'Sipi Cemerlang', value: `${results.jumlahSipiCemerlang.toLocaleString()} (${peratusSipiCemerlang}%)`, icon: '✨', category: 'sipiCemerlang' },
+                { title: 'Gagal Silang (BM/Sejarah)', value: `${results.gagalSilang.toLocaleString()} (${peratusGagalSilang}%)`, icon: '⚠️', category: 'gagalSilang' }
+            ];
+            resultsDiv.innerHTML = metrics.map(metric => `
+                <div class="metric-card bg-white p-6 rounded-2xl shadow-sm ${metric.category ? 'clickable' : ''}" ${metric.category ? `data-category="${metric.category}" data-title="${metric.title}"` : ''}>
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">${metric.title}</p>
+                            <p class="text-4xl font-bold text-gray-900 mt-1">${metric.value}</p>
+                        </div>
+                        <div class="text-3xl rounded-lg p-3 bg-gray-100">${metric.icon}</div>
+                    </div>
+                </div>
+            `).join('');
+            document.querySelectorAll('.clickable').forEach(card => card.addEventListener('click', () => openModal(card.dataset.category, card.dataset.title)));
+        }
+        
+        function getGpmpColorClass(gpmp) {
+            if (gpmp < 4.00) return 'bg-green-100 text-green-800';
+            if (gpmp >= 4.00 && gpmp <= 6.99) return 'bg-yellow-100 text-yellow-800';
+            return 'bg-red-100 text-red-800';
+        }
+
+        function displaySubjectTable(subjectStats) {
+            const container = document.getElementById('subjectTableContainer');
+            const dataToAnalyze = currentFilteredDataForAnalysis;
+            const sortOrder = document.getElementById('gpmpFilter')?.value || 'asal';
+            const markRangeSelection = document.getElementById('markRangeFilter')?.value || 'julat1';
+
+            if (!subjectStats || Object.keys(subjectStats).length === 0) {
+                 container.innerHTML = '<p class="text-center text-red-500 font-semibold p-8 bg-white rounded-2xl shadow-md">Tiada data subjek untuk dipaparkan.</p>';
+                 return;
+            }
+
+            const range1 = (markRangeSelection === 'julat1') ? {min: 1, max: 10, text: "1-10 Markah"} : {min: 1, max: 15, text: "1-15 Markah"};
+            const range2 = (markRangeSelection === 'julat1') ? {min: 11, max: 39, text: "11-39 Markah"} : {min: 16, max: 39, text: "16-39 Markah"};
+
+            const subjects = Object.values(subjectStats);
+            const predefinedOrder = ['BAHASA MELAYU', 'BAHASA INGGERIS', 'SEJARAH', 'MATEMATIK', 'SAINS', 'PENDIDIKAN ISLAM', 'PENDIDIKAN MORAL'];
+            if (sortOrder === 'asal') {
+                subjects.sort((a, b) => {
+                    const indexA = predefinedOrder.indexOf(a.nama), indexB = predefinedOrder.indexOf(b.nama);
+                    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                    if (indexA !== -1) return -1; if (indexB !== -1) return 1;
+                    return b.jumlahAmbil - a.jumlahAmbil;
+                });
+            } else if (sortOrder === 'terendah') subjects.sort((a, b) => a.gpmp - b.gpmp);
+            else if (sortOrder === 'tertinggi') subjects.sort((a, b) => b.gpmp - a.gpmp);
+
+            const headerHtml = `
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-4">
+                    <h2 class="text-2xl font-bold text-gray-900">Analisis Mengikut Mata Pelajaran</h2>
+                    <div class="flex items-center gap-x-6 gap-y-4 flex-wrap">
+                         <div>
+                            <label for="markRangeFilter" class="text-sm font-medium text-gray-700 mr-2">Pilih Julat Markah:</label>
+                            <select id="markRangeFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="julat1">Julat 1 (1-10 & 11-39)</option>
+                                <option value="julat2">Julat 2 (1-15 & 16-39)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="gpmpFilter" class="text-sm font-medium text-gray-700 mr-2">Susun Ikut GPMP:</label>
+                            <select id="gpmpFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="asal">Susunan Asal</option> <option value="terendah">Terendah</option> <option value="tertinggi">Tertinggi</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-md table-wrapper">
+                    <table class="w-full text-sm text-left text-gray-600">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 w-64 whitespace-normal">Subjek</th>
+                                <th scope="col" class="px-4 py-3 text-center">Jumlah Ambil</th>
+                                <th scope="col" class="px-4 py-3 text-center">Lulus</th>
+                                <th scope="col" class="px-4 py-3 text-center">Gagal</th>
+                                <th scope="col" class="px-4 py-3 text-center">Cemerlang</th>
+                                <th scope="col" class="px-4 py-3 text-center">GPMP</th>
+                                <th scope="col" class="px-4 py-3 text-center bg-blue-50">${range1.text}</th>
+                                <th scope="col" class="px-4 py-3 text-center bg-yellow-50">${range2.text}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            const bodyHtml = subjects.map(s => {
+                const peratusLulus = s.jumlahAmbil > 0 ? (s.bilLulus / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const peratusGagal = s.jumlahAmbil > 0 ? (s.bilGagal / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const peratusCemerlang = s.jumlahAmbil > 0 ? (s.bilCemerlang / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const gpmpColorClass = getGpmpColorClass(s.gpmp);
+
+                const subjectMarkColumn = `${s.nama}_M`;
+                let range1Count = 0;
+                let range2Count = 0;
+
+                if (dataToAnalyze && dataToAnalyze.length > 0) {
+                    const subjectStudents = dataToAnalyze.filter(student => student[subjectMarkColumn]);
+                    subjectStudents.forEach(student => {
+                        const mark = parseFloat(student[subjectMarkColumn]);
+                        if (!isNaN(mark)) {
+                            if (mark >= range1.min && mark <= range1.max) {
+                                range1Count++;
+                            } else if (mark >= range2.min && mark <= range2.max) {
+                                range2Count++;
+                            }
+                        }
+                    });
+                }
+                
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <th scope="row" class="px-4 py-2 font-medium text-gray-900 w-64 whitespace-normal">${s.nama}</th>
+                        <td class="px-4 py-2 text-center">${s.jumlahAmbil.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-center">${s.bilLulus.toLocaleString()} (${peratusLulus}%)</td>
+                        <td class="px-4 py-2 text-center">${s.bilGagal.toLocaleString()} (${peratusGagal}%)</td>
+                        <td class="px-4 py-2 text-center">${s.bilCemerlang.toLocaleString()} (${peratusCemerlang}%)</td>
+                        <td class="px-4 py-2 text-center font-bold ${gpmpColorClass}">${s.gpmp.toFixed(2)}</td>
+                        <td class="px-4 py-2 text-center bg-blue-50">${range1Count.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-center bg-yellow-50">${range2Count.toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+            const footerHtml = `</tbody></table></div>`;
+            container.innerHTML = headerHtml + bodyHtml + footerHtml;
+            document.getElementById('gpmpFilter').value = sortOrder;
+            document.getElementById('markRangeFilter').value = markRangeSelection;
+            document.getElementById('gpmpFilter').addEventListener('change', () => displaySubjectTable(currentAnalysisResults.subjectStats));
+            document.getElementById('markRangeFilter').addEventListener('change', () => displaySubjectTable(currentAnalysisResults.subjectStats));
+        }
+
+        function renderSummaryCards(summaryData) {
+            const metrics = [
+                { title: 'Bil Murid Ambil', value: summaryData.bilMuridAmbil.toLocaleString(), icon: '🙋'},
+                { title: 'Gred Purata (GPMP)', value: summaryData.gpmp, icon: '📊' },
+                { title: 'Lulus', value: `${summaryData.bilLulus.toLocaleString()} (${summaryData.peratusLulus}%)`, icon: '✅', category: 'subject_lulus' },
+                { title: 'Gagal', value: `${summaryData.bilGagal.toLocaleString()} (${summaryData.peratusGagal}%)`, icon: '❌', category: 'subject_gagal' },
+                { title: 'Cemerlang', value: `${summaryData.bilCemerlang.toLocaleString()} (${summaryData.peratusCemerlang}%)`, icon: '🌟', category: 'subject_cemerlang' },
+                { title: 'Tidak Hadir (TH)', value: summaryData.bilTH.toLocaleString(), icon: '✖️', category: 'subject_th' },
+                { title: 'Bil Sekolah Ambil', value: summaryData.bilSekolahAmbil.toLocaleString(), icon: '🏫' }
+            ];
+
+            return `
+                <div id="subject-summary-cards" class="mb-8">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Rumusan Subjek</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        ${metrics.map(metric => `
+                            <div class="metric-card bg-white p-6 rounded-2xl shadow-sm ${metric.category ? 'clickable' : ''}" ${metric.category ? `data-category="${metric.category}" data-title="${metric.title}"` : ''}>
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-500">${metric.title}</p>
+                                        <p class="text-3xl font-bold text-gray-900 mt-1">${metric.value}</p>
+                                    </div>
+                                    <div class="text-3xl rounded-lg p-3 bg-gray-100">${metric.icon}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSchoolAnalysisTable(studentData, subjectName) {
+            const sortOrder = document.getElementById('schoolSortFilter')?.value || 'asal';
+
+            let schoolStats = analyzeSchoolsBySubject(studentData, subjectName);
+
+            if (sortOrder === 'gpmp_tertinggi') {
+                schoolStats.sort((a,b) => b.gpmp - a.gpmp);
+            } else if (sortOrder === 'gpmp_terendah') {
+                schoolStats.sort((a,b) => a.gpmp - b.gpmp);
+            }
+            
+            if (!schoolStats || schoolStats.length === 0) {
+                 return '<p class="text-center text-gray-500 font-semibold p-8 bg-white rounded-2xl shadow-md">Tiada data sekolah untuk dipaparkan dengan penapis semasa.</p>';
+            }
+
+            return `
+                <div class="bg-white p-6 rounded-2xl shadow-md">
+                    <div class="flex justify-between items-center mb-4 flex-wrap gap-4">
+                        <h3 class="text-xl font-bold">Analisis Mengikut Sekolah</h3>
+                        <div class="flex items-center gap-x-4">
+                             <div>
+                                <label for="schoolSortFilter" class="text-sm font-medium text-gray-700 mr-2">Susun Ikut:</label>
+                                <select id="schoolSortFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50">
+                                    <option value="asal" ${sortOrder === 'asal' ? 'selected' : ''}>Susunan Asal</option>
+                                    <option value="gpmp_tertinggi" ${sortOrder === 'gpmp_tertinggi' ? 'selected' : ''}>GPMP Tertinggi</option>
+                                    <option value="gpmp_terendah" ${sortOrder === 'gpmp_terendah' ? 'selected' : ''}>GPMP Terendah</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 w-64 whitespace-normal">Sekolah</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Jumlah Ambil</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Lulus</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Gagal</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Cemerlang</th>
+                                    <th scope="col" class="px-4 py-3 text-center border-r-2 border-black">GPMP</th>
+                                    ${allGrades.map(g => `<th scope="col" class="px-4 py-3 text-center">${g}</th>`).join('')}
+                                    <th scope="col" class="px-4 py-3 text-center">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${schoolStats.map(s => {
+                                    const peratusLulus = s.jumlahAmbil > 0 ? (s.bilLulus / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                                    const peratusGagal = s.jumlahAmbil > 0 ? (s.bilGagal / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                                    const peratusCemerlang = s.jumlahAmbil > 0 ? (s.bilCemerlang / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                                    const gpmpColorClass = getGpmpColorClass(s.gpmp);
+                                    return `
+                                        <tr class="border-b hover:bg-gray-50">
+                                            <th scope="row" class="px-4 py-2 font-medium text-gray-900 w-64 whitespace-normal">${s.namaSekolah}</th>
+                                            <td class="px-4 py-2 text-center">${s.jumlahAmbil.toLocaleString()}</td>
+                                            <td class="px-4 py-2 text-center">${s.bilLulus.toLocaleString()} (${peratusLulus}%)</td>
+                                            <td class="px-4 py-2 text-center">${s.bilGagal.toLocaleString()} (${peratusGagal}%)</td>
+                                            <td class="px-4 py-2 text-center">${s.bilCemerlang.toLocaleString()} (${peratusCemerlang}%)</td>
+                                            <td class="px-4 py-2 text-center font-bold ${gpmpColorClass} border-r-2 border-black">${s.gpmp.toFixed(2)}</td>
+                                            ${allGrades.map(g => `<td class="px-4 py-2 text-center">${(s.gradeCounts[g] || 0).toLocaleString()}</td>`).join('')}
+                                            <td class="px-4 py-2 text-center"><button data-school-name="${s.namaSekolah}" class="view-school-student-list-btn bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600 text-xs">Lihat Senarai</button></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+        
+        function displaySekolahMuridSummaryCards(results) {
+            const container = document.getElementById('sekolah-murid-summary-cards');
+            if (!results || !results.jumlahCalon) {
+                container.innerHTML = `<p class="text-center col-span-full text-red-500 font-semibold">Tiada data untuk sekolah ini.</p>`;
+                return;
+            }
+
+            const peratusCemerlang = (results.jumlahAmbil > 0 ? (results.jumlahCemerlang / results.jumlahAmbil) * 100 : 0).toFixed(2);
+            const peratusSipiCemerlang = (results.jumlahAmbil > 0 ? (results.jumlahSipiCemerlang / results.jumlahAmbil) * 100 : 0).toFixed(2);
+            const peratusGagalSilang = (results.jumlahAmbil > 0 ? (results.gagalSilang / results.jumlahAmbil) * 100 : 0).toFixed(2);
+
+            const metrics = [
+                { title: 'Jumlah Ambil', value: results.jumlahAmbil.toLocaleString(), icon: '🙋' },
+                { title: 'Tidak Hadir Semua Subjek', value: results.jumlahTidakHadirSemua.toLocaleString(), icon: '✖️', category: 'sekolah_th' },
+                { title: 'Gred Purata Sekolah (GPS)', value: results.gpn, icon: '🏫' },
+                { title: 'Layak Mendapat Sijil (LMS)', value: `${results.layakMendapatSijil.toLocaleString()} (${results.peratusLMS}%)`, icon: '📜', category: 'sekolah_lms' },
+                { title: 'Jumlah Cemerlang', value: `${results.jumlahCemerlang.toLocaleString()} (${peratusCemerlang}%)`, icon: '🌟', category: 'sekolah_cemerlang' },
+                { title: 'Sipi Cemerlang', value: `${results.jumlahSipiCemerlang.toLocaleString()} (${peratusSipiCemerlang}%)`, icon: '✨', category: 'sekolah_sipi_cemerlang' },
+                { title: 'Gagal Silang (BM/Sejarah)', value: `${results.gagalSilang.toLocaleString()} (${peratusGagalSilang}%)`, icon: '⚠️', category: 'sekolah_gagal_silang' }
+            ];
+
+            container.innerHTML = metrics.map(metric => `
+                <div class="metric-card bg-white p-6 rounded-2xl shadow-sm ${metric.category ? 'clickable' : ''}" ${metric.category ? `data-category="${metric.category}" data-title="${metric.title}"` : ''}>
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">${metric.title}</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${metric.value}</p>
+                        </div>
+                        <div class="text-3xl rounded-lg p-3 bg-gray-100">${metric.icon}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.querySelectorAll('.clickable').forEach(card => {
+                card.addEventListener('click', () => {
+                      const category = card.dataset.category;
+                      const title = card.dataset.title;
+                      openSekolahMuridModal(category, title);
+                });
+            });
+        }
+        
+        function displaySekolahMuridSubjectTable(subjectStats) {
+            const container = document.getElementById('sekolah-murid-subject-table');
+            const sortOrder = document.getElementById('schoolGpmpFilter')?.value || 'asal';
+            if (!subjectStats || Object.keys(subjectStats).length === 0) {
+                 container.innerHTML = '<p class="text-center text-red-500 font-semibold p-8 bg-white rounded-2xl shadow-md">Tiada data subjek untuk sekolah ini.</p>';
+                 return;
+            }
+            const subjects = Object.values(subjectStats);
+            const predefinedOrder = ['BAHASA MELAYU', 'BAHASA INGGERIS', 'SEJARAH', 'MATEMATIK', 'SAINS', 'PENDIDIKAN ISLAM', 'PENDIDIKAN MORAL'];
+            if (sortOrder === 'asal') {
+                subjects.sort((a, b) => {
+                    const indexA = predefinedOrder.indexOf(a.nama), indexB = predefinedOrder.indexOf(b.nama);
+                    if (indexA !== -1 && indexB !== -1) return indexA - indexB; if (indexA !== -1) return -1; if (indexB !== -1) return 1;
+                    return b.jumlahAmbil - a.jumlahAmbil;
+                });
+            } else if (sortOrder === 'terendah') subjects.sort((a, b) => a.gpmp - b.gpmp);
+            else if (sortOrder === 'tertinggi') subjects.sort((a, b) => b.gpmp - a.gpmp);
+
+            const headerHtml = `
+                <div class="bg-white p-6 rounded-2xl shadow-md">
+                    <div class="flex justify-between items-center mb-4 flex-wrap gap-4">
+                        <h2 class="text-2xl font-bold text-gray-900">Analisis Subjek Sekolah</h2>
+                        <div>
+                            <label for="schoolGpmpFilter" class="text-sm font-medium text-gray-700 mr-2">Susun Ikut GPMP:</label>
+                            <select id="schoolGpmpFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50">
+                                <option value="asal">Asal</option><option value="terendah">Terendah</option><option value="tertinggi">Tertinggi</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 whitespace-normal">Subjek</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Ambil</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Lulus</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Gagal</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Cemerlang</th>
+                                    <th scope="col" class="px-4 py-3 text-center border-r-2 border-black">GPMP</th>
+                                    ${allGrades.map(g => `<th scope="col" class="px-2 py-3 text-center">${g}</th>`).join('')}
+                                    <th scope="col" class="px-4 py-3 text-center">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            const bodyHtml = subjects.map(s => {
+                const peratusLulus = s.jumlahAmbil > 0 ? (s.bilLulus / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const peratusGagal = s.jumlahAmbil > 0 ? (s.bilGagal / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const peratusCemerlang = s.jumlahAmbil > 0 ? (s.bilCemerlang / s.jumlahAmbil * 100).toFixed(2) : '0.00';
+                const gpmpColorClass = getGpmpColorClass(s.gpmp);
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <th scope="row" class="px-4 py-2 font-medium text-gray-900 whitespace-normal">${s.nama}</th>
+                        <td class="px-4 py-2 text-center">${s.jumlahAmbil.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-center">${s.bilLulus.toLocaleString()} (${peratusLulus}%)</td>
+                        <td class="px-4 py-2 text-center">${s.bilGagal.toLocaleString()} (${peratusGagal}%)</td>
+                        <td class="px-4 py-2 text-center">${s.bilCemerlang.toLocaleString()} (${peratusCemerlang}%)</td>
+                        <td class="px-4 py-2 text-center font-bold ${gpmpColorClass} border-r-2 border-black">${s.gpmp.toFixed(2)}</td>
+                        ${allGrades.map(g => `<td class="px-2 py-2 text-center">${(s.gradeCounts[g] || 0).toLocaleString()}</td>`).join('')}
+                        <td class="px-4 py-2 text-center">
+                            <button data-subject-name="${s.nama}" class="view-school-subject-list-btn bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600 text-xs">Lihat</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            const footerHtml = `</tbody></table></div></div>`;
+            container.innerHTML = headerHtml + bodyHtml + footerHtml;
+            document.getElementById('schoolGpmpFilter').value = sortOrder;
+            document.getElementById('schoolGpmpFilter').addEventListener('change', () => displaySekolahMuridSubjectTable(currentSchoolAnalysisResults.subjectStats));
+            container.querySelectorAll('.view-school-subject-list-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const subjectName = e.target.dataset.subjectName;
+                    openSekolahMuridModal('sekolah_subjek', `Senarai Murid - ${subjectName}`, subjectName);
+                });
+            });
+        }
+        
+        function displaySekolahMuridStudentPerformanceTable(studentData) {
+            const container = document.getElementById('sekolah-murid-student-performance-table');
+            const sortOrder = document.getElementById('studentPerformanceSortFilter')?.value || 'asal';
+            if (!studentData || studentData.length === 0) {
+                container.innerHTML = ''; return;
+            }
+            const gradeColumns = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+            const gradeValues = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+
+            let studentPerformanceData = studentData.map(student => ({
+                ...student,
+                gpi: calculateGPI(student, gradeColumns, gradeValues),
+                achievementSummary: getGradeSummary(student, gradeColumns)
+            }));
+            
+            if (sortOrder === 'gpi_tertinggi') {
+                studentPerformanceData.sort((a, b) => b.gpi - a.gpi);
+            } else if (sortOrder === 'gpi_terendah') {
+                studentPerformanceData.sort((a, b) => a.gpi - b.gpi);
+            } else if (sortOrder === 'pencapaian_terbaik') {
+                const gradeOrder = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'G', 'TH'];
+                studentPerformanceData.sort((a, b) => {
+                      const gradeCountsA = getGradeCounts(a, gradeColumns);
+                      const gradeCountsB = getGradeCounts(b, gradeColumns);
+                      for (const grade of gradeOrder) {
+                          const diff = (gradeCountsB[grade] || 0) - (gradeCountsA[grade] || 0);
+                          if (diff !== 0) return diff;
+                      }
+                      return b.gpi - a.gpi; // As a tie-breaker
+                });
+            }
+
+
+            const tableHtml = `
+                <div class="bg-white p-6 rounded-2xl shadow-md">
+                     <div class="flex justify-between items-center mb-4 flex-wrap gap-4">
+                        <h2 class="text-2xl font-bold text-gray-900">Prestasi Individu Murid</h2>
+                        <div>
+                            <label for="studentPerformanceSortFilter" class="text-sm font-medium text-gray-700 mr-2">Susun Ikut:</label>
+                            <select id="studentPerformanceSortFilter" class="p-2 border border-gray-300 rounded-md bg-gray-50">
+                                <option value="asal">Susunan Asal</option>
+                                <option value="gpi_tertinggi">GPI Tertinggi</option>
+                                <option value="gpi_terendah">GPI Terendah</option>
+                                <option value="pencapaian_terbaik">Pencapaian Terbaik</option>
+                            </select>
+                        </div>
+                     </div>
+                     <div class="table-wrapper">
+                         <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3">Bil</th>
+                                    <th scope="col" class="px-4 py-3">Nama Murid</th>
+                                    <th scope="col" class="px-4 py-3 text-center">GPI</th>
+                                    <th scope="col" class="px-4 py-3">Pencapaian Keseluruhan</th>
+                                    <th scope="col" class="px-4 py-3 text-center">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${studentPerformanceData.map((student, index) => `
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="px-4 py-2">${index + 1}</td>
+                                        <td class="px-4 py-2 font-medium text-gray-900">${student.Nama || 'N/A'}</td>
+                                        <td class="px-4 py-2 text-center font-semibold">${student.gpi.toFixed(2)}</td>
+                                        <td class="px-4 py-2">${student.achievementSummary}</td>
+                                        <td class="px-4 py-2 text-center">
+                                            <button data-student-index="${index}" class="view-slip-btn bg-purple-500 text-white px-3 py-1 rounded-md hover:bg-purple-600 text-xs">Papar Slip</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                         </table>
+                     </div>
+                </div>
+            `;
+            container.innerHTML = tableHtml;
+            document.getElementById('studentPerformanceSortFilter').value = sortOrder;
+            document.getElementById('studentPerformanceSortFilter').addEventListener('change', () => displaySekolahMuridStudentPerformanceTable(currentSchoolData));
+            container.querySelectorAll('.view-slip-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const studentIndex = parseInt(e.target.dataset.studentIndex, 10);
+                    const student = studentPerformanceData[studentIndex];
+                    openSlipModal(student);
+                });
+            });
+        }
+
+
+        // --- Modal & PDF Functions ---
+        function formatMark(mark) {
+            if (mark === null || mark === undefined || mark.trim() === '') return '-';
+            const markUpper = mark.toUpperCase();
+            if (markUpper === 'TH') return 'TH';
+            const num = parseFloat(mark);
+            return !isNaN(num) ? num : '-';
+        }
+        function formatGrade(grade) {
+            if (!grade || grade.trim() === '') return '-';
+            const gradeUpper = grade.toUpperCase();
+            return allGrades.includes(gradeUpper) ? gradeUpper : '-';
+        }
+        
+        function openModal(category, title) {
+            currentModalCategory = category;
+            currentStudentList = currentAnalysisResults.lists[category] || [];
+            document.getElementById('modalTitle').textContent = `Senarai: ${title}`;
+
+            const cemerlangCats = ['cemerlang', 'sipiCemerlang'];
+            document.getElementById('lmsSortContainer').classList.toggle('hidden', category !== 'lms');
+            document.getElementById('subjectSortContainer').classList.add('hidden');
+            document.getElementById('gagalSilangFilterContainer').classList.toggle('hidden', category !== 'gagalSilang');
+            document.getElementById('gpiSortContainer').classList.toggle('hidden', !cemerlangCats.includes(category));
+            document.getElementById('modalSekolahFilterContainer').classList.remove('hidden');
+            updateSekolahFilter(); 
+            document.getElementById('sekolahFilter').value = 'semua';
+            document.getElementById('studentSearch').value = '';
+            updateStudentList();
+            listModal.classList.remove('hidden');
+            document.body.classList.add('modal-active');
+            setTimeout(() => { listModal.querySelector('.modal-content').classList.remove('-translate-y-full'); }, 10);
+        }
+
+        function openSubjectStudentListModal(subjectName, studentData) {
+            currentModalCategory = 'subject_detail';
+            currentStudentList = studentData;
+            currentModalSubject = subjectName;
+            document.getElementById('modalTitle').textContent = `Senarai Murid: ${subjectName}`;
+            document.getElementById('lmsSortContainer').classList.add('hidden');
+            document.getElementById('subjectSortContainer').classList.remove('hidden');
+            document.getElementById('gagalSilangFilterContainer').classList.add('hidden');
+            document.getElementById('modalSekolahFilterContainer').classList.remove('hidden');
+            updateSekolahFilter();
+            document.getElementById('sekolahFilter').value = 'semua';
+            document.getElementById('studentSearch').value = '';
+            updateStudentList();
+            listModal.classList.remove('hidden');
+            document.body.classList.add('modal-active');
+            setTimeout(() => { listModal.querySelector('.modal-content').classList.remove('-translate-y-full'); }, 10);
+        }
+
+        function openSubjectSummaryModal(category, title) {
+            currentModalCategory = category;
+            currentModalSubject = document.getElementById('subjekSubjekFilter').value;
+            const cemerlangGrades = ['A+', 'A', 'A-'];
+
+            switch (category) {
+                case 'subject_cemerlang':
+                    currentStudentList = subjectDetailStudentList.filter(s => cemerlangGrades.includes(s[`${currentModalSubject}_G`]?.toUpperCase()));
+                    break;
+                case 'subject_lulus':
+                    currentStudentList = subjectDetailStudentList.filter(s => {
+                        const grade = s[`${currentModalSubject}_G`]?.toUpperCase();
+                        return grade && grade !== 'G' && grade !== 'TH';
+                    });
+                    break;
+                case 'subject_gagal':
+                    currentStudentList = subjectDetailStudentList.filter(s => s[`${currentModalSubject}_G`]?.toUpperCase() === 'G');
+                    break;
+                case 'subject_th':
+                    currentStudentList = subjectDetailStudentList.filter(s => s[`${currentModalSubject}_G`]?.toUpperCase() === 'TH');
+                    break;
+                default:
+                    currentStudentList = [];
+            }
+
+            document.getElementById('modalTitle').textContent = `Senarai Murid: ${title} (${currentModalSubject})`;
+            
+            const isPerformanceCategory = ['subject_cemerlang', 'subject_lulus', 'subject_gagal'].includes(category);
+            document.getElementById('lmsSortContainer').classList.add('hidden');
+            document.getElementById('subjectSortContainer').classList.toggle('hidden', !isPerformanceCategory);
+            document.getElementById('gagalSilangFilterContainer').classList.add('hidden');
+            document.getElementById('modalSekolahFilterContainer').classList.remove('hidden');
+
+            updateSekolahFilter();
+            document.getElementById('sekolahFilter').value = 'semua';
+            document.getElementById('studentSearch').value = '';
+            updateStudentList();
+
+            listModal.classList.remove('hidden');
+            document.body.classList.add('modal-active');
+            setTimeout(() => { listModal.querySelector('.modal-content').classList.remove('-translate-y-full'); }, 10);
+        }
+
+        function openSekolahMuridModal(category, title, subjectName = null) {
+            currentModalCategory = category;
+            currentModalSubject = subjectName || '';
+            
+            const categoryToListMap = {
+                sekolah_lms: currentSchoolAnalysisResults.lists.lms,
+                sekolah_cemerlang: currentSchoolAnalysisResults.lists.cemerlang,
+                sekolah_sipi_cemerlang: currentSchoolAnalysisResults.lists.sipiCemerlang,
+                sekolah_gagal_silang: currentSchoolAnalysisResults.lists.gagalSilang,
+                sekolah_th: currentSchoolAnalysisResults.lists.tidakHadir,
+                sekolah_subjek: currentSchoolData.filter(s => s[`${subjectName}_G`])
+            };
+            currentStudentList = categoryToListMap[category] || [];
+            
+            document.getElementById('modalTitle').textContent = `${title} - ${document.getElementById('sekolahSekolahFilter').value}`;
+            
+            const cemerlangCats = ['sekolah_cemerlang', 'sekolah_sipi_cemerlang'];
+            document.getElementById('lmsSortContainer').classList.add('hidden');
+            document.getElementById('subjectSortContainer').classList.add('hidden');
+            document.getElementById('gagalSilangFilterContainer').classList.add('hidden');
+            document.getElementById('gpiSortContainer').classList.add('hidden'); // Reset first
+            document.getElementById('modalSekolahFilterContainer').classList.add('hidden');
+
+            if (category === 'sekolah_lms') document.getElementById('lmsSortContainer').classList.remove('hidden');
+            if (category === 'sekolah_subjek') document.getElementById('subjectSortContainer').classList.remove('hidden');
+            if (category === 'sekolah_gagal_silang') document.getElementById('gagalSilangFilterContainer').classList.remove('hidden');
+            if (cemerlangCats.includes(category)) document.getElementById('gpiSortContainer').classList.remove('hidden');
+
+            document.getElementById('studentSearch').value = '';
+            document.getElementById('markahSortFilter').value = 'default';
+            document.getElementById('subjectMarkahSortFilter').value = 'default';
+            document.getElementById('gagalSilangCategoryFilter').value = 'semua';
+            document.getElementById('gpiSortFilter').value = 'default';
+            updateStudentList();
+            
+            listModal.classList.remove('hidden');
+            document.body.classList.add('modal-active');
+            setTimeout(() => { listModal.querySelector('.modal-content').classList.remove('-translate-y-full'); }, 10);
+        }
+        
+        function openSlipModal(student) {
+            if (!student) {
+                console.error("openSlipModal dipanggil dengan data murid yang tidak sah.");
+                return;
+            }
+            const container = document.getElementById('slip-print-area');
+            const gradeColumns = Object.keys(student).filter(h => h.endsWith('_G'));
+            const gradeValues = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+
+            const lmsStatus = (student['BAHASA MELAYU_G']?.toUpperCase() !== 'G' && student['BAHASA MELAYU_G']?.toUpperCase() !== 'TH' && student['SEJARAH_G']?.toUpperCase() !== 'G' && student['SEJARAH_G']?.toUpperCase() !== 'TH') 
+                ? '<span class="text-green-600 font-semibold">LAYAK</span>' 
+                : '<span class="text-red-600 font-semibold">TIDAK LAYAK</span>';
+
+            const slipHTML = `
+                <div class="text-center mb-4">
+                    <h3 class="font-bold text-lg">SLIP KEPUTUSAN PEPERIKSAAN</h3>
+                    <p class="text-sm">${student.Sekolah || 'N/A'}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-4">
+                    <div class="font-semibold">NAMA MURID:</div><div>${student.Nama || 'N/A'}</div>
+                    <div class="font-semibold">ANGKA GILIRAN:</div><div>${student.No_Giliran || 'N/A'}</div>
+                </div>
+                <hr class="my-3">
+                <div class="table-wrapper">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="p-2 text-left">SUBJEK</th>
+                                <th class="p-2 text-center">MARKAH</th>
+                                <th class="p-2 text-center">GRED</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${gradeColumns.map(col => {
+                                const subjectName = col.replace('_G', '');
+                                const mark = student[`${subjectName}_M`];
+                                const grade = student[col];
+                                if (!grade) return '';
+                                return `
+                                <tr class="border-b">
+                                    <td class="p-2">${subjectName}</td>
+                                    <td class="p-2 text-center">${formatMark(mark)}</td>
+                                    <td class="p-2 text-center font-bold">${formatGrade(grade)}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                 <hr class="my-3">
+                 <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-4">
+                    <div class="font-semibold">KEPUTUSAN KESELURUHAN:</div><div>${getGradeSummary(student, gradeColumns)}</div>
+                    <div class="font-semibold">GRED PURATA INDIVIDU (GPI):</div><div>${calculateGPI(student, gradeColumns, gradeValues).toFixed(2)}</div>
+                    <div class="font-semibold">LAYAK MENDAPAT SIJIL (LMS):</div><div>${lmsStatus}</div>
+                </div>
+            `;
+
+            container.innerHTML = slipHTML;
+            slipModal.classList.remove('hidden');
+            document.body.classList.add('modal-active');
+            setTimeout(() => { slipModal.querySelector('.modal-content').classList.remove('-translate-y-full'); }, 10);
+        }
+
+        function closeModal() {
+            listModal.querySelector('.modal-content').classList.add('-translate-y-full');
+            setTimeout(() => { listModal.classList.add('hidden'); document.body.classList.remove('modal-active'); }, 250);
+        }
+
+        function closeSlipModal() {
+            slipModal.querySelector('.modal-content').classList.add('-translate-y-full');
+            setTimeout(() => { slipModal.classList.add('hidden'); document.body.classList.remove('modal-active'); }, 250);
+        }
+        
+        function printSlip() {
+            window.print();
+        }
+
+        function updateSekolahFilter() {
+            const sekolahFilter = document.getElementById('sekolahFilter');
+            const sekolahList = [...new Set(currentStudentList.map(s => s.Sekolah))].filter(Boolean).sort();
+            sekolahFilter.innerHTML = '<option value="semua">Semua Sekolah</option>';
+            sekolahList.forEach(sekolah => { sekolahFilter.innerHTML += `<option value="${sekolah}">${sekolah}</option>`; });
+        }
+
+        function getCurrentlyFilteredStudents() {
+            let students = [...currentStudentList];
+            
+            const searchTerm = document.getElementById('studentSearch').value.toLowerCase();
+            if (searchTerm) {
+                students = students.filter(s => s.Nama && s.Nama.toLowerCase().includes(searchTerm));
+            }
+
+            const isSchoolModal = currentModalCategory.startsWith('sekolah_');
+            if (!isSchoolModal) {
+                 const selectedSekolah = document.getElementById('sekolahFilter').value;
+                if (selectedSekolah !== 'semua') {
+                    students = students.filter(s => s.Sekolah === selectedSekolah);
+                }
+            }
+            
+            const performanceCategories = ['subject_detail', 'subject_cemerlang', 'subject_lulus', 'subject_gagal', 'sekolah_subjek'];
+            const lmsCategories = ['lms', 'sekolah_lms'];
+            const gagalSilangCategories = ['gagalSilang', 'sekolah_gagal_silang'];
+            const cemerlangDetailCats = ['cemerlang', 'sipiCemerlang', 'sekolah_cemerlang', 'sekolah_sipi_cemerlang'];
+
+            if (lmsCategories.includes(currentModalCategory)) {
+                const sortOrder = document.getElementById('markahSortFilter').value;
+                const getMark = (s, sub) => parseFloat(s[sub]) || -1;
+                if(sortOrder !== 'default') {
+                    if (sortOrder === 'bm_highest') students.sort((a, b) => getMark(b, 'BAHASA MELAYU_M') - getMark(a, 'BAHASA MELAYU_M'));
+                    else if (sortOrder === 'bm_lowest') students.sort((a, b) => getMark(a, 'BAHASA MELAYU_M') - getMark(b, 'BAHASA MELAYU_M'));
+                    else if (sortOrder === 'sej_highest') students.sort((a, b) => getMark(b, 'SEJARAH_M') - getMark(a, 'SEJARAH_M'));
+                    else if (sortOrder === 'sej_lowest') students.sort((a, b) => getMark(a, 'SEJARAH_M') - getMark(b, 'SEJARAH_M'));
+                }
+            } else if (gagalSilangCategories.includes(currentModalCategory)) {
+                const category = document.getElementById('gagalSilangCategoryFilter').value;
+                if (category !== 'semua') {
+                    const getStatus = (grade) => {
+                        const g = grade?.toUpperCase();
+                        if (g === 'G') return 'g'; if (g === 'TH') return 'th'; return 'l';
+                    };
+                    students = students.filter(s => {
+                        const bmStatus = getStatus(s['BAHASA MELAYU_G']);
+                        const sejStatus = getStatus(s['SEJARAH_G']);
+                        return category === `bm_${bmStatus}_sej_${sejStatus}`;
+                    });
+                }
+            } else if (performanceCategories.includes(currentModalCategory)) {
+                const sortOrder = document.getElementById('subjectMarkahSortFilter').value;
+                const getMark = (s, sub) => parseFloat(s[`${sub}_M`]) || -1;
+                 if(sortOrder !== 'default') {
+                    if(sortOrder === 'highest') students.sort((a,b) => getMark(b, currentModalSubject) - getMark(a, currentModalSubject));
+                    else students.sort((a,b) => getMark(a, currentModalSubject) - getMark(b, currentModalSubject));
+                 }
+            } else if (cemerlangDetailCats.includes(currentModalCategory)) {
+                const sortOrder = document.getElementById('gpiSortFilter').value;
+                if (sortOrder !== 'default') {
+                    const gradeCols = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+                    const gradeVals = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+                    
+                    students.forEach(s => {
+                        s.gpi = calculateGPI(s, gradeCols, gradeVals);
+                    });
+
+                    if (sortOrder === 'highest') { // GPI Tertinggi -> Highest value, worst performance
+                        students.sort((a, b) => b.gpi - a.gpi);
+                    } else if (sortOrder === 'lowest') { // GPI Terendah -> Lowest value, best performance
+                        students.sort((a, b) => a.gpi - b.gpi);
+                    }
+                }
+            }
+            return students;
+        }
+        
+        function renderGagalSilangSummary(students) {
+            const summaryContainer = document.getElementById('gagalSilangSummaryContainer');
+            if (!students || students.length === 0) {
+                summaryContainer.innerHTML = ''; return;
+            }
+            const categories = {
+                bm_l_sej_g: { text: "BM Lulus / SEJ Gagal", count: 0 }, bm_l_sej_th: { text: "BM Lulus / SEJ TH", count: 0 },
+                bm_g_sej_l: { text: "BM Gagal / SEJ Lulus", count: 0 }, bm_g_sej_g: { text: "BM Gagal / SEJ Gagal", count: 0 },
+                bm_g_sej_th: { text: "BM Gagal / SEJ TH", count: 0 }, bm_th_sej_l: { text: "BM TH / SEJ Lulus", count: 0 },
+                bm_th_sej_g: { text: "BM TH / SEJ Gagal", count: 0 }, bm_th_sej_th: { text: "BM TH / SEJ TH", count: 0 }
+            };
+            const getStatus = (grade) => {
+                const g = grade?.toUpperCase(); if (g === 'G') return 'g'; if (g === 'TH') return 'th'; return 'l';
+            };
+            students.forEach(s => {
+                const bmStatus = getStatus(s['BAHASA MELAYU_G']), sejStatus = getStatus(s['SEJARAH_G']);
+                if (bmStatus !== 'l' || sejStatus !== 'l') {
+                    const key = `bm_${bmStatus}_sej_${sejStatus}`;
+                    if (categories[key]) categories[key].count++;
+                }
+            });
+            summaryContainer.innerHTML = `
+                <h4 class="text-lg font-semibold mb-2">Rumusan Kategori Gagal Silang (${students.length} murid)</h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    ${Object.entries(categories).map(([key, cat]) => `
+                        <div class="p-2 bg-gray-100 rounded-md hover:bg-blue-100 cursor-pointer transition-colors" data-category-key="${key}">
+                            <span class="font-medium">${cat.text}:</span>
+                            <span class="font-bold float-right">${cat.count.toLocaleString()}</span>
+                        </div>
+                    `).join('')}
+                </div>`;
+        }
+
+        function updateStudentList() {
+            const listContainer = document.getElementById('studentListContainer');
+            const summaryContainer = document.getElementById('gagalSilangSummaryContainer');
+            summaryContainer.innerHTML = ''; 
+
+            const gagalSilangCategories = ['gagalSilang', 'sekolah_gagal_silang'];
+            if (gagalSilangCategories.includes(currentModalCategory)) {
+                renderGagalSilangSummary(currentStudentList);
+                document.querySelectorAll('#gagalSilangSummaryContainer [data-category-key]').forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        document.getElementById('gagalSilangCategoryFilter').value = e.currentTarget.dataset.categoryKey;
+                        updateStudentList(); 
+                    });
+                });
+            }
+
+            const filteredStudents = getCurrentlyFilteredStudents();
+            
+            // Highlight selected Gagal Silang category
+            if (gagalSilangCategories.includes(currentModalCategory)) {
+                 const selectedCategory = document.getElementById('gagalSilangCategoryFilter').value;
+                 document.querySelectorAll('#gagalSilangSummaryContainer [data-category-key]').forEach(card => {
+                    card.classList.remove('summary-card-selected');
+                    if (card.dataset.categoryKey === selectedCategory) {
+                        card.classList.add('summary-card-selected');
+                    }
+                 });
+            }
+
+            if (filteredStudents.length === 0) {
+                listContainer.innerHTML = '<p class="text-center text-gray-500 py-4">Tiada murid dalam senarai ini.</p>'; return;
+            }
+            let tableHTML;
+            const perfCats = ['subject_detail', 'subject_cemerlang', 'subject_lulus', 'subject_gagal', 'sekolah_subjek'];
+            const lmsCats = ['lms', 'sekolah_lms'];
+            const gagalCats = ['gagalSilang', 'sekolah_gagal_silang'];
+            const cemerlangDetailCats = ['cemerlang', 'sekolah_cemerlang', 'sipiCemerlang', 'sekolah_sipi_cemerlang'];
+            
+            if (perfCats.includes(currentModalCategory)) {
+                 tableHTML = `<table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0"><tr>
+                            <th scope="col" class="px-4 py-3">Bil</th><th scope="col" class="px-4 py-3">Nama Murid</th>
+                            <th scope="col" class="px-4 py-3">Sekolah</th><th scope="col" class="px-4 py-3 text-center">Markah</th><th scope="col" class="px-4 py-3 text-center">Gred</th>
+                        </tr></thead><tbody>
+                        ${filteredStudents.map((s, i) => `
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="px-4 py-2">${i + 1}</td><td class="px-4 py-2">${s.Nama || 'N/A'}</td>
+                                <td class="px-4 py-2">${s.Sekolah || 'N/A'}</td>
+                                <td class="px-4 py-2 text-center">${formatMark(s[`${currentModalSubject}_M`])}</td>
+                                <td class="px-4 py-2 text-center">${formatGrade(s[`${currentModalSubject}_G`])}</td>
+                            </tr>`).join('')}
+                        </tbody></table>`;
+            } else if (lmsCats.includes(currentModalCategory) || gagalCats.includes(currentModalCategory)) {
+                tableHTML = `<table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0"><tr>
+                        <th class="px-4 py-3">Bil</th><th class="px-4 py-3">Nama</th><th class="px-4 py-3">Sekolah</th>
+                        <th class="px-4 py-3 text-center">M-BM</th><th class="px-4 py-3 text-center">G-BM</th>
+                        <th class="px-4 py-3 text-center">M-Sej</th><th class="px-4 py-3 text-center">G-Sej</th>
+                        </tr></thead><tbody>
+                        ${filteredStudents.map((s, i) => `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-4 py-2">${i+1}</td><td class="px-4 py-2">${s.Nama || 'N/A'}</td><td class="px-4 py-2">${s.Sekolah || 'N/A'}</td>
+                            <td class="px-4 py-2 text-center">${formatMark(s['BAHASA MELAYU_M'])}</td><td class="px-4 py-2 text-center">${formatGrade(s['BAHASA MELAYU_G'])}</td>
+                            <td class="px-4 py-2 text-center">${formatMark(s['SEJARAH_M'])}</td><td class="px-4 py-2 text-center">${formatGrade(s['SEJARAH_G'])}</td>
+                        </tr>`).join('')}
+                        </tbody></table>`;
+            } else if (cemerlangDetailCats.includes(currentModalCategory)) {
+                const gradeCols = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+                const gradeVals = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+                tableHTML = `<table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0"><tr>
+                        <th class="px-4 py-3">Bil</th>
+                        <th class="px-4 py-3">Nama Murid</th>
+                        <th class="px-4 py-3">Sekolah</th>
+                        <th class="px-4 py-3 text-center">GPI</th>
+                        <th class="px-4 py-3">Pencapaian Gred</th>
+                        <th class="px-4 py-3 text-center">Tindakan</th>
+                        </tr></thead><tbody>
+                        ${filteredStudents.map((s, i) => `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-4 py-2">${i + 1}</td>
+                            <td class="px-4 py-2">${s.Nama || 'N/A'}</td>
+                            <td class="px-4 py-2">${s.Sekolah || 'N/A'}</td>
+                            <td class="px-4 py-2 text-center">${calculateGPI(s, gradeCols, gradeVals).toFixed(2)}</td>
+                            <td class="px-4 py-2">${getGradeSummary(s, gradeCols)}</td>
+                            <td class="px-4 py-2 text-center">
+                               <button data-student-index="${i}" class="view-slip-btn-modal bg-purple-500 text-white px-3 py-1 rounded-md hover:bg-purple-600 text-xs">Papar Slip</button>
+                            </td>
+                        </tr>`).join('')}</tbody></table>`;
+            } else { // Fallback for 'tidakHadir', 'subject_th', 'sekolah_th'
+                tableHTML = `<table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0">
+                        <tr><th class="px-4 py-3">Bil</th><th class="px-4 py-3">Nama</th><th class="px-4 py-3">Sekolah</th></tr></thead><tbody>
+                        ${filteredStudents.map((s, i) => `<tr class="border-b hover:bg-gray-50"><td class="px-4 py-2">${i+1}</td><td class="px-4 py-2">${s.Nama || 'N/A'}</td><td class="px-4 py-2">${s.Sekolah || 'N/A'}</td></tr>`).join('')}
+                        </tbody></table>`;
+            }
+            listContainer.innerHTML = `<div class="table-wrapper">${tableHTML}</div>`;
+
+            listContainer.querySelectorAll('.view-slip-btn-modal').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const studentIndex = parseInt(e.target.dataset.studentIndex, 10);
+                    const student = filteredStudents[studentIndex];
+                    if(student) {
+                        openSlipModal(student);
+                    }
+                });
+            });
+        }
+        
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape' });
+            const title = document.getElementById('modalTitle').textContent;
+            const studentsToExport = getCurrentlyFilteredStudents();
+
+            if (studentsToExport.length === 0) { return; }
+            
+            let head, body;
+            const perfCats = ['subject_detail', 'subject_cemerlang', 'subject_lulus', 'subject_gagal', 'sekolah_subjek'];
+            const lmsCats = ['lms', 'sekolah_lms'];
+            const gagalCats = ['gagalSilang', 'sekolah_gagal_silang'];
+            const cemerlangDetailCats = ['cemerlang', 'sekolah_cemerlang', 'sipiCemerlang', 'sekolah_sipi_cemerlang'];
+
+            if (perfCats.includes(currentModalCategory)) {
+                head = [['Bil', 'Nama Murid', 'Sekolah', 'Markah', 'Gred']];
+                body = studentsToExport.map((s, i) => [ i + 1, s.Nama, s.Sekolah, formatMark(s[`${currentModalSubject}_M`]), formatGrade(s[`${currentModalSubject}_G`])]);
+            } else if (lmsCats.includes(currentModalCategory) || gagalCats.includes(currentModalCategory)) {
+                head = [['Bil', 'Nama', 'Sekolah', 'M-BM', 'G-BM', 'M-Sej', 'G-Sej']];
+                body = studentsToExport.map((s, i) => [i + 1, s.Nama, s.Sekolah, formatMark(s['BAHASA MELAYU_M']), formatGrade(s['BAHASA MELAYU_G']), formatMark(s['SEJARAH_M']), formatGrade(s['SEJARAH_G']) ]);
+            } else if (cemerlangDetailCats.includes(currentModalCategory)) {
+                const gradeCols = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+                const gradeVals = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+                head = [['Bil', 'Nama Murid', 'Sekolah', 'GPI', 'Pencapaian Gred']];
+                body = studentsToExport.map((s, i) => [ i + 1, s.Nama, s.Sekolah, calculateGPI(s, gradeCols, gradeVals).toFixed(2), getGradeSummary(s, gradeCols)]);
+            } else {
+                head = [['Bil', 'Nama Murid', 'Sekolah']];
+                body = studentsToExport.map((s, i) => [i + 1, s.Nama, s.Sekolah]);
+            }
+            doc.setFontSize(18); doc.text(title, 14, 22);
+            doc.autoTable({ startY: 30, head: head, body: body, theme: 'grid', headStyles: { fillColor: [41, 128, 185] } });
+            doc.save(`${title.replace(/[ :/]/g, '_').toLowerCase()}.pdf`);
+        }
+
+        function generateExcel() {
+            const studentsToExport = getCurrentlyFilteredStudents();
+            const title = document.getElementById('modalTitle').textContent;
+            
+            if (studentsToExport.length === 0) {
+                const btn = document.getElementById('generateExcelBtn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<span>Tiada Data</span>';
+                btn.disabled = true;
+                setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+                return;
+            }
+
+            let dataForSheet;
+            const perfCats = ['subject_detail', 'subject_cemerlang', 'subject_lulus', 'subject_gagal', 'sekolah_subjek'];
+            const lmsCats = ['lms', 'sekolah_lms'];
+            const gagalCats = ['gagalSilang', 'sekolah_gagal_silang'];
+            const cemerlangDetailCats = ['cemerlang', 'sekolah_cemerlang', 'sipiCemerlang', 'sekolah_sipi_cemerlang'];
+            
+            if (perfCats.includes(currentModalCategory)) {
+                dataForSheet = studentsToExport.map((s, i) => ({
+                    'Bil': i + 1, 'Nama Murid': s.Nama || 'N/A', 'Sekolah': s.Sekolah || 'N/A',
+                    'Markah': formatMark(s[`${currentModalSubject}_M`]), 'Gred': formatGrade(s[`${currentModalSubject}_G`])
+                }));
+            } else if (lmsCats.includes(currentModalCategory) || gagalCats.includes(currentModalCategory)) {
+                dataForSheet = studentsToExport.map((s, i) => ({
+                    'Bil': i + 1, 'Nama Murid': s.Nama || 'N/A', 'Sekolah': s.Sekolah || 'N/A',
+                    'Markah BM': formatMark(s['BAHASA MELAYU_M']), 'Gred BM': formatGrade(s['BAHASA MELAYU_G']),
+                    'Markah Sejarah': formatMark(s['SEJARAH_M']), 'Gred Sejarah': formatGrade(s['SEJARAH_G'])
+                }));
+            } else if (cemerlangDetailCats.includes(currentModalCategory)) {
+                 const gradeCols = Object.keys(fullData[0] || {}).filter(h => h.endsWith('_G'));
+                 const gradeVals = { 'A+': 0, 'A': 1, 'A-': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, 'E': 8, 'G': 9 };
+                 dataForSheet = studentsToExport.map((s, i) => ({
+                    'Bil': i + 1,
+                    'Nama Murid': s.Nama || 'N/A',
+                    'Sekolah': s.Sekolah || 'N/A',
+                    'GPI': calculateGPI(s, gradeCols, gradeVals).toFixed(2),
+                    'Pencapaian Gred': getGradeSummary(s, gradeCols)
+                }));
+            } else { 
+                dataForSheet = studentsToExport.map((s, i) => ({
+                    'Bil': i + 1, 'Nama Murid': s.Nama || 'N/A', 'Sekolah': s.Sekolah || 'N/A'
+                }));
+            }
+            
+            const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Senarai Murid");
+            
+            const fileName = `${title.replace(/[ :/]/g, '_').toLowerCase()}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+        }
+
+        function updateDateTime() {
+            const dateTimeDisplay = document.getElementById('date-time-display');
+            if(dateTimeDisplay){
+                const now = new Date();
+                const options = {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                    hour: 'numeric', minute: '2-digit', hour12: true,
+                    timeZone: 'Asia/Kuala_Lumpur'
+                };
+                dateTimeDisplay.textContent = `Analisis pada: ${now.toLocaleString('ms-MY', options)}`;
+            }
+        }
+
+        // --- Initialisation & Event Listeners ---
+        function initialiseApp() {
+            updateDateTime();
+            
+            const uploadBox = document.getElementById('upload-box');
+            
+            // File input listener
+            document.getElementById('csvFile').addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) processFile(file);
+            });
+            
+            // Drag and drop listeners
+            uploadBox.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                uploadBox.classList.add('dragover');
+            });
+            uploadBox.addEventListener('dragleave', () => {
+                uploadBox.classList.remove('dragover');
+            });
+            uploadBox.addEventListener('drop', (event) => {
+                event.preventDefault();
+                uploadBox.classList.remove('dragover');
+                if (event.dataTransfer.files.length > 0) {
+                    document.getElementById('csvFile').files = event.dataTransfer.files;
+                    const file = event.dataTransfer.files[0];
+                    if (file) processFile(file);
+                }
+            });
+
+            // Navigation card listeners
+            document.getElementById('nav-keseluruhan').addEventListener('click', () => showPage('keseluruhan-page'));
+            document.getElementById('nav-subjek').addEventListener('click', () => showPage('subjek-page'));
+            document.getElementById('nav-sekolah-murid').addEventListener('click', () => showPage('sekolah-murid-page'));
+            document.getElementById('nav-stem').addEventListener('click', () => showPage('stem-page'));
+            
+            document.querySelectorAll('.back-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    showPage('upload-page');
+                    document.getElementById('upload-box').classList.add('hidden');
+                    document.getElementById('navigation-cards').classList.remove('hidden');
+                });
+            });
+
+            // Modal Listeners
+            document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+            listModal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+            document.getElementById('closeSlipModalBtn').addEventListener('click', closeSlipModal);
+            slipModal.querySelector('.modal-overlay').addEventListener('click', closeSlipModal);
+            document.getElementById('printSlipBtn').addEventListener('click', printSlip);
+            document.getElementById('studentSearch').addEventListener('input', updateStudentList);
+            document.getElementById('sekolahFilter').addEventListener('change', updateStudentList);
+            document.getElementById('markahSortFilter').addEventListener('change', updateStudentList);
+            document.getElementById('subjectMarkahSortFilter').addEventListener('change', updateStudentList);
+            document.getElementById('gagalSilangCategoryFilter').addEventListener('change', updateStudentList);
+            document.getElementById('gpiSortFilter').addEventListener('change', updateStudentList);
+            document.getElementById('generatePdfBtn').addEventListener('click', generatePDF);
+            document.getElementById('generateExcelBtn').addEventListener('click', generateExcel);
+        }
+        initialiseApp();
+    </script>
+</body>
+</html>
+
+
+
+
+
